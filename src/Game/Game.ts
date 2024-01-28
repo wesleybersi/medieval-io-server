@@ -1,7 +1,7 @@
 import { Player } from "./entities/Player/Player";
 import Floor from "./Floor/Floor";
 import { io } from "../server";
-import { UPDATE_INTERVAL } from "../constants";
+import { MAX_ITERATIONS, MIN_ITERATIONS, UPDATE_INTERVAL } from "../constants";
 
 import { GameIntervalData } from "./types";
 
@@ -9,6 +9,8 @@ import { Socket } from "socket.io";
 import { JoinGameRequest, onJoinGame } from "./events/on-player-joins";
 import { addPlayer } from "./controllers/add-player";
 import { removePlayer } from "./controllers/remove-player";
+import { oneIn, randomNum } from "../utilities";
+import { Stairs } from "./Floor/entities/Stairs/Stairs";
 
 interface GameConfig {
   name: string;
@@ -24,10 +26,23 @@ export default class Game {
   floors: Floor[] = [];
   players: Map<string, Player>;
   hasLoaded = false;
-  emitTracker = true;
+  emitTracker = false;
   timeRemaining: number;
   intervalID?: NodeJS.Timeout;
   frameCount: number = 0;
+
+  globalTimers: {
+    [key: number]: number;
+  } = {
+    1: 0, //Interval in seconds : Time Passed
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+    6: 0,
+    7: 0,
+    8: 0,
+  };
 
   //Socket events
   onJoinGame: (socket: Socket) => void = onJoinGame;
@@ -47,8 +62,27 @@ export default class Game {
       this.floors.push(new Floor(this, i));
     }
 
+    //Populate floors
     for (const floor of this.floors) {
-      floor.populate();
+      floor.populate({
+        iterations: Math.max(randomNum(MAX_ITERATIONS), MIN_ITERATIONS),
+        roomChance: Math.max(randomNum(75), 32),
+        roomDepth: randomNum(3),
+      });
+    }
+
+    //Link floors with stairs
+    for (const floor of this.floors) {
+      floor.placeStairsToNextLevel();
+
+      //TODO based on size
+      // const additionalStairs = randomNum(
+      //   Math.floor((floor.rows * floor.cols) / 2000)
+      // );
+      // console.log(additionalStairs);
+      // for (let i = 0; i < additionalStairs; i++) {
+      //   if (oneIn(2)) floor.placeStairsAtOffset();
+      // }
     }
 
     this.timeRemaining = config.timer * 60;
@@ -56,6 +90,7 @@ export default class Game {
   }
   start() {
     let lastUpdateTime = 0;
+
     const currentFrame = () => {
       const currentTime = Date.now();
       const delta = (currentTime - lastUpdateTime) / 1000; // Convert to seconds
@@ -66,15 +101,34 @@ export default class Game {
         this.frameCount = 0;
       }
 
+      //Update global timers
+      for (const [timer, timePassed] of Object.entries(this.globalTimers)) {
+        const interval = parseInt(timer);
+        this.globalTimers[interval] += delta;
+
+        if (timePassed >= interval) {
+          //Add all objects tied to global timers within floor to updater method within floor
+          for (const floor of this.floors) {
+            if (floor.players.size === 0) continue;
+            for (const updater of floor.globalTimedUpdaters[interval]) {
+              floor.updaters.add(updater);
+            }
+          }
+
+          if (interval === 1) {
+            this.timeRemaining--;
+            this.emitIntervalData();
+          }
+          //Reset timer
+          this.globalTimers[interval] = 0;
+        }
+      }
+
+      //Update all floors
       for (const floor of this.floors) {
         if (floor.players.size === 0) continue;
         floor.update(delta, this.frameCount);
         floor.emit();
-      }
-
-      if (this.frameCount % 60 === 0) {
-        this.timeRemaining--;
-        this.emitIntervalData();
       }
     };
 
@@ -89,7 +143,9 @@ export default class Game {
 
     const data = [];
     for (const [, player] of this.players) {
-      player.secondsAlive++;
+      if (!player.didDie) {
+        player.secondsAlive++;
+      }
       data.push({
         name: player.name,
         color: player.color,

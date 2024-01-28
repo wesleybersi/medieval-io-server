@@ -1,7 +1,8 @@
-import Floor, { MatrixCellType } from "../Floor";
-import { WeaponType } from "../../entities/Weapon/types";
-import { WeaponPickup } from "../../entities/Pickup/Pickup";
+import Floor, { MatrixCellType, SpriteGridType, SpriteIDType } from "../Floor";
+import { WeaponType } from "../../entities/Player/entities/Weapon/types";
+import { WeaponPickup } from "../entities/Pickup/Pickup";
 import { Socket } from "socket.io";
+import { Emission } from "../types";
 
 export function emitInitialData(this: Floor, socket: Socket) {
   const players = [];
@@ -12,19 +13,17 @@ export function emitInitialData(this: Floor, socket: Socket) {
       color: player.color,
       x: player.x,
       y: player.y,
-      weapon: {
-        type: player.weaponry[player.weaponIndex].type,
-        tier: player.weaponry[player.weaponIndex].tier,
-      },
+      weapon:
+        player.weaponIndex >= 0
+          ? {
+              type: player.weaponry[player.weaponIndex]?.type,
+              tier: player.weaponry[player.weaponIndex]?.tier,
+            }
+          : null,
       angle: player.angle,
       height: player.height,
       width: player.width,
     });
-  }
-  const tiles = [];
-  for (const [, tile] of this.tiles) {
-    const { id, x, y, type } = tile;
-    tiles.push({ id, x, y, type });
   }
 
   const pickups = [];
@@ -38,17 +37,29 @@ export function emitInitialData(this: Floor, socket: Socket) {
       });
     }
   }
+  const spriteGridMatrix: [string, SpriteGridType][] = [];
+  const lastEmissions: [string, Emission][] = [];
+
+  for (const sprite of this.spriteGridMatrix) {
+    spriteGridMatrix.push(sprite);
+  }
+
+  for (const emission of this.lastEmissions) {
+    lastEmissions.push(emission);
+  }
 
   const initialData: InitialFloorData = {
     id: socket.id,
     players,
-    tiles,
     pickups,
-    matrix: this.matrix,
+    objectMatrix: this.objectMatrix,
+    spriteGridMatrix,
+    lastEmissions: lastEmissions,
     size: {
       rows: this.rows,
       cols: this.cols,
     },
+    decoration: this.decoration,
   };
   socket.emit("Initial Floor Data", initialData);
 }
@@ -69,16 +80,15 @@ export interface InitialFloorData {
     height: number;
     width: number;
   }[];
-  matrix: MatrixCellType[][];
-  tiles: {
-    id: number;
-    type: "Crate";
-    x: number;
-    y: number;
-  }[];
+  objectMatrix: MatrixCellType[][];
+  spriteGridMatrix: [string, SpriteGridType][];
+  lastEmissions: [string, Emission][];
   pickups: {
     type: WeaponType;
     row: number;
     col: number;
   }[];
+  decoration: {
+    torches: { row: number; col: number }[];
+  };
 }

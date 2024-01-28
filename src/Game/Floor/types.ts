@@ -1,8 +1,12 @@
+import { WeaponBonus } from "../entities/Player/entities/Weapon/Weapon";
+import { Direction } from "../../types";
+import { ItemType } from "./entities/ItemDrop/ItemDrop";
+import { ProjectileState, ProjectileType } from "../entities/Projectile/types";
+
 import {
-  ProjectileState,
-  ProjectileType,
-} from "../entities/Weapon/Projectile/types";
-import { WeaponTier, WeaponType } from "../entities/Weapon/types";
+  WeaponType,
+  WeaponTier,
+} from "../entities/Player/entities/Weapon/types";
 
 export interface EmissionData {
   client?: {
@@ -10,40 +14,43 @@ export interface EmissionData {
     name: string;
     color: number;
     floor: number;
+    state: string;
     x: number;
     y: number;
     angle: number;
     health: number;
-    weaponry: { type: WeaponType; tier: WeaponTier }[];
+    gold: number;
+    weaponry: {
+      type: WeaponType;
+      tier: WeaponTier;
+      durability: number;
+      isAttack?: boolean;
+      bonus?: WeaponBonus;
+    }[];
+    secondsAlive: number;
     weaponIndex: number;
     projectiles: { arrows: number };
+    dialog?: { name: string; text: string[] };
   };
   players: {
     id: string;
     color: number;
+    state: string;
     x: number;
     y: number;
     angle: number;
-    weapon: { type: WeaponType; tier: WeaponTier; isLoaded?: boolean };
+    weapon: {
+      type: WeaponType;
+      tier: WeaponTier;
+      isLoaded?: boolean;
+      isAttack?: boolean;
+      force?: number;
+      position?: string;
+    };
     wasHit?: boolean;
     isDead?: boolean;
   }[];
-  tiles: {
-    id: number;
-    type: "Crate";
-    x: number;
-    y: number;
-    hp: number;
-  }[];
-  spikes: {
-    row: number;
-    col: number;
-    state: "on" | "off";
-  }[];
-  destroyedPots: {
-    row: number;
-    col: number;
-  }[];
+  updaters: Emission[];
   //This is going to grow and grow and grow. Need a new system
   pickups: {
     type: WeaponType;
@@ -52,15 +59,43 @@ export interface EmissionData {
     amount?: number;
     remove?: boolean;
   }[];
-  projectiles: {
-    id: number;
-    type: ProjectileType;
-    state: ProjectileState;
-    x: number;
-    y: number;
-    z: number;
-    angle: number;
-    velocity: number;
-  }[];
   tracker: { key: string; amount: number }[];
+}
+
+export type EmissionType =
+  | "pot"
+  | "spikes"
+  | "chest"
+  | "door"
+  | "drop-arrow"
+  | "drop-five-arrows"
+  | "drop-gold"
+  | "drop-heart"
+  | "drop-key"
+  | "drop-potion-red"
+  | "drop-potion-blue"
+  | "drop-potion-green"
+  | "projectile-arrow"
+  | "projectile-pot"
+  | "projectile-spear";
+export interface Emission {
+  type: EmissionType;
+  state?: string;
+  id?: string;
+  row?: number;
+  col?: number;
+  x?: number;
+  y?: number;
+  z?: number;
+  angle?: number;
+  tier?: number;
+  hp?: number;
+  velocity?: number;
+  isOn?: boolean;
+  isOpen?: boolean;
+  isCarry?: boolean;
+  flash?: boolean;
+  hit?: boolean;
+  direction?: Direction;
+  remove?: boolean;
 }

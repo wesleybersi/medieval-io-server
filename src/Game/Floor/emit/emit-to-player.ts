@@ -1,5 +1,5 @@
 import { io } from "../../../server";
-import Game from "../../Game";
+
 import Floor from "../Floor";
 
 export function emit(this: Floor) {
@@ -9,30 +9,41 @@ export function emit(this: Floor) {
       name,
       color,
       floor,
+      state,
       x,
       y,
       angle,
       weaponry,
       health,
+      gold,
       weaponIndex,
       projectiles,
+      finalSecondsAlive,
+      dialog,
     } = player;
     this.emissionData.client = {
       id,
       name,
       color,
+      state,
       floor: floor.index,
       x,
       y,
       angle,
       health,
-      weaponry: weaponry.map(({ type, tier }) => ({
+      gold,
+      secondsAlive: finalSecondsAlive,
+      weaponry: weaponry.map(({ type, tier, durability, bonus }) => ({
         type,
         tier,
+        durability: durability.current,
+        bonus,
       })),
       projectiles,
       weaponIndex,
+      dialog,
     };
+
     io.to(id).emit("Game State Update", this.emissionData);
   }
 }

@@ -4,8 +4,10 @@ export const UPDATE_INTERVAL = 1000 / FRAME_RATE;
 
 //Grid
 export const CELL_SIZE = 16;
-export const WALL_SIZE = 8;
+
+//Floor
+export const MIN_ITERATIONS = 8;
+export const MAX_ITERATIONS = 750;
 
 //Player
-export const PLAYER_SIZE = CELL_SIZE;
-export const MOVEMENT_SPEED = 90;
+export const PLAYER_SIZE = CELL_SIZE * 0.7;

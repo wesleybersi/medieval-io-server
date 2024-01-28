@@ -1,60 +1,115 @@
-import { Spikes } from "./../entities/Spikes/Spikes";
+import { Spikes } from "./entities/Spikes/Spikes";
 import { oneIn, randomLowerNumber, randomNum } from "../../utilities";
 import Game from "../Game";
 import { getNearestEmptyCell } from "./methods/get-nearest-empty-cell";
 import { getAdjacentCells } from "./methods/get-adjacent-cells";
-import { CELL_SIZE, WALL_SIZE } from "../../constants";
+import { CELL_SIZE } from "../../constants";
 import { Player } from "../entities/Player/Player";
 import { getTouchedCells } from "./methods/get-touched-cells";
 import { trackPosition } from "./methods/track-position";
-import { Projectile } from "../entities/Weapon/Projectile/Projectile";
+import { Projectile } from "../entities/Projectile/Projectile";
 import { removeFromTracker } from "./methods/remove-from-tracker";
-import { Wall } from "../entities/Wall/Wall";
-import { Tile } from "../entities/Tile/Tile";
-import { Pickup, WeaponPickup } from "../entities/Pickup/Pickup";
+import { Wall } from "./entities/Wall/Wall";
+import { Pickup, WeaponPickup } from "./entities/Pickup/Pickup";
 import { addToIndividualTrackerCell } from "./methods/add-to-tracker-cell";
-import { Hole } from "../entities/Hole/Hole";
-import { EmissionData } from "./types";
+import { Hole } from "./entities/Hole/Hole";
+import { EmissionData, Emission as Emission } from "./types";
 import { updatePlayers } from "./update/players";
-import { updateProjectiles } from "./update/projectiles";
-import { updateTiles } from "./update/tiles";
-import { updatePickups } from "./update/pickups";
+
 import { updateTracker } from "./update/tracker";
 import { emit } from "./emit/emit-to-player";
 import { emitInitialData } from "./emit/emit-initial-data";
 import { Socket } from "socket.io";
 import { removePlayer } from "./methods/remove-player";
 import { addPlayer } from "./methods/add-player";
-import { Stairs } from "../entities/Stairs/Stairs";
-import { Carver } from "./populate/Carver/Carver";
-import { Pot } from "../entities/Pot/Pot";
-import {
-  getRandomWeaponTier,
-  getRandomWeaponType,
-} from "../entities/Pickup/random-weapon";
+
+import { Pot } from "./entities/Pot/Pot";
+import { Chest } from "./entities/Chest/Chest";
+import { Door } from "./entities/Door/Door";
+import { ItemDrop, ItemType } from "./entities/ItemDrop/ItemDrop";
+import { PopulateConfig, populate } from "./populate/populate";
+import { update } from "./update/update";
+import { placeStairsToNextLevel } from "./populate/methods/place-first-stairs";
+import { Stairs } from "./entities/Stairs/Stairs";
+import { placeStairsAtOffset } from "./populate/methods/place-stairs-at-offset";
+import { Room } from "./entities/Room/Room";
+import { ProjectileType } from "../entities/Projectile/types";
+import { Shooter } from "./entities/Shooter/Shooter";
+import { Sign } from "./entities/Sign/Sign";
 
 export type GridObject =
   | Player
-  | Tile
   | Projectile
   | Wall
   | Pickup
   | Hole
   | Stairs
   | Spikes
-  | Pot;
+  | Pot
+  | Chest
+  | Door
+  | ItemDrop
+  | Shooter
+  | Sign;
 
-export type MatrixCellType =
-  | "floor"
-  | "wall"
+export type MatrixCellType = //TODO Only grid cell objects
+
+    | "floor"
+    | "floor-0"
+    | "floor-1"
+    | "floor-2"
+    | "floor-3"
+    | "floor-4"
+    | "floor-5"
+    | "floor-6"
+    | "floor-7"
+    | "floor-8"
+    | "floor-9"
+    | "floor-10"
+    | "floor-11"
+    | "floor-12"
+    | "floor-13"
+    | "floor-14"
+    | "floor-15"
+    | "floor-16"
+    | "floor-17"
+    | "floor-18"
+    | "floor-19"
+    | "shooter-up"
+    | "shooter-down"
+    | "shooter-left"
+    | "shooter-right"
+    | "wall"
+    | "wall-torch"
+    | "wall-damaged"
+    | "wall-cracks"
+    | "surrounded-wall"
+    | "spikes"
+    | "spikes-on"
+    | "spikes-off"
+    | "water"
+    | "hole"
+    | ItemType;
+
+export type SpriteGridType =
   | "pot"
-  | "spikes"
-  | "spikes-on"
-  | "spikes-off"
-  | "water"
-  | "hole"
+  | "horz-door-open-up"
+  | "horz-door-open-down"
+  | "horz-door-closed"
+  | "horz-door-locked"
+  | "vert-door-open-left"
+  | "vert-door-open-right"
+  | "vert-door-closed"
+  | "vert-door-locked"
   | "stairs-up"
-  | "stairs-down";
+  | "stairs-down"
+  | "chest-silver-open"
+  | "chest-silver-closed"
+  | "chest-gold-open"
+  | "chest-gold-closed"
+  | "sign-rectangle";
+
+export type SpriteIDType = "pot" | ProjectileType;
 
 export default class Floor {
   game: Game;
@@ -63,36 +118,59 @@ export default class Floor {
   cols: number = 1;
   cellSize: number = CELL_SIZE;
 
-  players: Map<string, Player> = new Map(); // <id, Player>
-  projectiles: Set<Projectile> = new Set();
-  projectileIndex: number = 0;
+  potsToRespawn = 0;
 
-  matrix: MatrixCellType[][] = [["wall"]]; //Static cell based objects
-  decoration: Map<string, string> = new Map(); // <(row,col), decoration>
+  players: Map<string, Player> = new Map(); // <id, Player>
+
+  objectMatrix: MatrixCellType[][] = [["wall"]]; //Mostly walls and floor tiles
+  spriteGridMatrix: Map<string, SpriteGridType> = new Map(); // <row,col, Sprite>
+  lastEmissions: Map<string, Emission> = new Map(); // <id, Sprite Emission>
+
+  decoration: {
+    torches: { row: number; col: number }[];
+  } = {
+    torches: [],
+  };
 
   tracker: Map<string, Set<GridObject>> = new Map(); //non-static objects touching cells
-
-  //TODO Move to tracker
-  objects: Map<string, Stairs> = new Map();
 
   //TODO Move to matrix
   walls: Map<string, Wall> = new Map(); // <row,col, Wall>
   holes: Map<string, Hole> = new Map(); // <row,col, Wall>
 
-  tiles: Map<number, Tile> = new Map(); // <index, Tile>
   pickups: Map<string, Pickup> = new Map(); // <row,col,Pickup>
   pickupTarget: number = 0;
 
-  stairsUp: Stairs[] = [];
-  stairsDown: Stairs[] = [];
+  rooms = new Set<Room>();
+
+  downPos: { row: number; col: number } = { row: 0, col: 0 };
+  nextFloorOffset: { rows: number; cols: number } = { rows: 0, cols: 0 };
+
+  //Populate
+  populate: (config: PopulateConfig) => void = populate;
+  placeStairsToNextLevel: () => void = placeStairsToNextLevel;
+  placeStairsAtOffset: () => void = placeStairsAtOffset;
 
   //Updaters
-  globalTimers: { [key: number]: Spikes[] } = {}; // For instance: {60: Spike} will trigger the update method of the spike every 60 frames
+  globalTimedUpdaters: {
+    [key: number]: Set<Spikes>;
+  } = {
+    1: new Set(),
+    2: new Set(),
+    3: new Set(),
+    4: new Set(),
+    5: new Set(),
+    6: new Set(),
+    7: new Set(),
+    8: new Set(),
+  };
+
+  updaters: Set<ItemDrop | Spikes | Projectile | Shooter> = new Set(); //Add object to this set and the object's update method gets called each frame
+  emissions: Emission[] = []; //Add an emission to this array and the emission will be send to the client
+
   updatePlayers: (delta: number, counter: number) => void = updatePlayers;
-  updateProjectiles: (delta: number) => void = updateProjectiles;
-  updateTiles: (delta: number) => void = updateTiles;
-  updatePickups: (delta: number) => void = updatePickups;
   updateTracker: (delta: number) => void = updateTracker;
+  update: (delta: number, counter: number) => void = update;
 
   emit: () => void = emit;
   emitInitialData: (socket: Socket) => void = emitInitialData;
@@ -102,10 +180,7 @@ export default class Floor {
   removePlayer: (player: Player) => void = removePlayer;
   emissionData: EmissionData = {
     players: [],
-    tiles: [],
-    projectiles: [],
-    destroyedPots: [],
-    spikes: [],
+    updaters: [],
     pickups: [],
     tracker: [],
   };
@@ -130,303 +205,50 @@ export default class Floor {
   trackPosition: (object: GridObject, width?: number, height?: number) => void =
     trackPosition;
   addToTrackerCell: (
-    object: Wall | Pickup | Hole | Stairs | Spikes | Pot
+    object:
+      | Wall
+      | Pickup
+      | Hole
+      | Stairs
+      | Spikes
+      | Chest
+      | Door
+      | ItemDrop
+      | Shooter
+      | Sign,
+    row: number,
+    col: number
   ) => void = addToIndividualTrackerCell;
   removeFromTracker: (object: GridObject) => void = removeFromTracker;
   constructor(game: Game, index: number) {
     this.game = game;
     this.index = index;
   }
-
-  update(delta: number, counter: number) {
-    this.emissionData = {
-      players: [],
-      tiles: [],
-      projectiles: [],
-      destroyedPots: [],
-      spikes: [],
-      pickups: [],
-      tracker: [],
-    };
-    this.updatePlayers(delta, counter);
-    this.updatePickups(delta);
-    this.updateTiles(delta);
-    this.updateProjectiles(delta);
-
-    //ANCHOR Global timers
-    for (const [timer, objects] of Object.entries(this.globalTimers)) {
-      if (objects.length === 0) {
-        //If no objects found, delete timer
-        delete this.globalTimers[Number(timer)];
-        continue;
-      }
-      if (counter % Number(timer) === 0) {
-        //Update all objects in timer
-        for (const obj of objects) obj.update();
-      }
-    }
-
-    this.updateTracker(delta);
-  }
-
-  populate() {
-    const MIN_ITERATIONS = 32;
-    const MAX_ITERATIONS = Math.max(350, MIN_ITERATIONS);
-
-    //Floor zero starts at random
-    let startRow = Math.max(randomNum(100), 2);
-    let startCol = Math.max(randomNum(100), 2);
-
-    //Rest start from staircase
-    //TODO Staircase 2.0
-    if (this.stairsUp.length > 0) {
-      startRow = this.stairsUp[0].b.row;
-      startCol = this.stairsUp[0].b.col;
-    }
-    this.matrix = Array.from({ length: startRow + 1 }).map(() =>
-      Array.from({ length: startCol + 1 }).map(() => "wall")
+  isValidCell(row: number, col: number): boolean {
+    return (
+      row >= 0 &&
+      row < this.objectMatrix.length &&
+      col >= 0 &&
+      col < this.objectMatrix[0].length
     );
-
-    this.rows = startRow;
-    this.cols = startCol;
-
-    new Carver(this, startRow, startCol, {
-      iterations: randomNum(MAX_ITERATIONS),
-      probability: { spikes: 24, water: Infinity },
-    }).move();
-
-    //TODO Fix
-    // this.clampGrid();
-    this.matrix.unshift(Array.from({ length: this.cols }).map(() => "wall"));
-    this.matrix.push(Array.from({ length: this.cols }).map(() => "wall"));
-    this.matrix.forEach((row) => row.unshift("wall"));
-    this.matrix.forEach((row) => row.push("wall"));
-    this.matrix.forEach((row, y) => {
-      row.forEach((cell, x) => {
-        switch (cell) {
-          case "floor":
-            if (
-              (row[x - 1] && row[x - 1] === "wall") ||
-              (row[x + 1] && row[x + 1] === "wall") ||
-              (this.matrix[y - 1] && this.matrix[y - 1][x] === "wall") ||
-              (this.matrix[y + 1] && this.matrix[y - 1][x] === "wall") ||
-              oneIn(16)
-            ) {
-              if (oneIn(16)) new Pot(this, y, x);
-            }
-
-            break;
-          case "spikes-on":
-          case "spikes-off":
-            {
-              // let num = 60;
-              // if (oneIn(3)) {
-              //   num *= randomNum(4);
-              // }
-              new Spikes(this, y, x, {
-                initialState: cell.endsWith("off") ? "off" : "on",
-                globalTimer: 120,
-                // globalTimer: num,
-              });
-            }
-            break;
-          case "wall":
-            new Wall(this, y, x, WALL_SIZE);
-            break;
-          case "hole":
-            new Hole(this, y, x);
-            break;
-        }
-      });
-    });
-
-    this.rows = this.matrix.length;
-    this.cols = this.matrix[0].length;
-
-    console.log("Grid:", this.rows, "rows by", this.cols, "cols");
-
-    if (this.stairsUp.length > 0) {
-      this.matrix[this.stairsUp[0].b.row][this.stairsUp[0].b.col] = "stairs-up";
-    }
-
-    this.placeStairsToNextLevel();
-
-    //Define walls
-
-    for (const [_, wall] of this.walls) {
-      const top = this.walls.get(`${wall.row - 1},${wall.col}`);
-      const bottom = this.walls.get(`${wall.row + 1},${wall.col}`);
-      const left = this.walls.get(`${wall.row},${wall.col - 1}`);
-      const right = this.walls.get(`${wall.row},${wall.col + 1}`);
-      if (top) wall.adjacentWalls.top = true;
-      if (bottom) wall.adjacentWalls.bottom = true;
-      if (left) wall.adjacentWalls.left = true;
-      if (right) wall.adjacentWalls.right = true;
-    }
-
-    // let tileIndex = 0;
-    // for (let row = 0; row < this.rows; row++) {
-    //   for (let col = 0; col < this.cols; col++) {
-    //     const trackerPos = this.tracker.get(`${row},${col}`);
-    //     if (trackerPos && trackerPos.size > 0) continue;
-    //     if (oneIn(50)) {
-    //       new Tile(
-    //         this,
-    //         tileIndex,
-    //         col * CELL_SIZE + CELL_SIZE / 2,
-    //         row * CELL_SIZE + CELL_SIZE / 2
-    //       );
-    //       tileIndex++;
-    //     }
-    //   }
-    // }
-
-    // //Pickups
-    // for (let row = 0; row < this.rows; row++) {
-    //   for (let col = 0; col < this.cols; col++) {
-    //     const trackerPos = this.tracker.get(`${row},${col}`);
-    //     if (trackerPos && trackerPos.size > 0) continue;
-
-    //     if (oneIn(200)) {
-    //       const type = getRandomWeaponType();
-    //       const tier = getRandomWeaponTier(type);
-    //       new WeaponPickup(this, row, col, {
-    //         type,
-    //         tier,
-    //       });
-    //     }
-    //   }
-    // }
-    // this.pickupTarget = this.pickups.size;
   }
+
   getRandomEmptyCell(): { row: number; col: number } {
     const cells: { row: number; col: number }[] = [];
-    this.matrix.forEach((row, y) => {
+    this.objectMatrix.forEach((row, y) => {
       row.forEach((cell, x) => {
-        if (cell === "floor") {
-          if (!this.walls.has(`${y},${x}`) && !this.tracker.has(`${y},${x}`))
-            cells.push({ row: y, col: x });
+        if (cell.includes("floor")) {
+          // if (!this.walls.has(`${y},${x}`) && !this.tracker.has(`${y},${x}`))
+          cells.push({ row: y, col: x });
         }
       });
     });
     return cells[randomNum(cells.length)];
   }
-  placeStairsToNextLevel() {
-    if (this.index === this.game.floors.length - 1) return;
-
-    const { row, col } = this.getRandomEmptyCell();
-
-    new Stairs(
-      {
-        floor: this,
-        row,
-        col,
-        direction: "down",
-      },
-      {
-        floor: this.game.floors[this.index + 1],
-        row,
-        col,
-        direction: "up",
-      }
-    );
-  }
-
-  clampGrid() {
-    let spliceAmount = 0;
-    // check per row from top
-    for (const row of this.matrix) {
-      if (row.every((cell) => cell === "wall")) {
-        spliceAmount++;
-      } else {
-        break;
-      }
-    }
-    this.matrix.splice(0, spliceAmount);
-    this.rows -= spliceAmount;
-
-    for (const stairs of this.stairsUp) {
-      stairs.b.row -= spliceAmount;
-    }
-
-    //check per row from bottom
-    spliceAmount = 0;
-    for (const row of [...this.matrix].reverse()) {
-      if (row.every((cell) => cell === "wall")) {
-        spliceAmount++;
-      } else {
-        break;
-      }
-    }
-    this.matrix.splice(this.matrix.length - spliceAmount, spliceAmount);
-    this.rows -= spliceAmount;
-
-    //check per col from left and right
-    const columnIsWall = (row: number, col: number): boolean => {
-      if (this.matrix[row][col] === "floor") {
-        return false;
-      } else {
-        if (row === this.rows - 1) {
-          console.log("Column is wall");
-          return true;
-        }
-        return columnIsWall(row + 1, col);
-      }
-    };
-
-    spliceAmount = 0;
-    for (let col = 0; col < this.cols; col++) {
-      if (columnIsWall(0, col)) {
-        this.matrix.forEach((row) => row.shift());
-        spliceAmount++;
-        console.log("Removing wall from left");
-      } else {
-        break;
-      }
-    }
-    this.cols -= spliceAmount;
-    for (const stairs of this.stairsUp) {
-      stairs.b.col -= spliceAmount;
-    }
-
-    spliceAmount = 0;
-    for (let col = this.cols - 1; col >= 0; col--) {
-      if (columnIsWall(0, col)) {
-        this.matrix.forEach((row) => row.pop());
-        spliceAmount++;
-        console.log("Removing wall from right");
-      } else {
-        break;
-      }
-    }
-    this.cols -= spliceAmount;
-  }
 
   getObjectInPlace(row: number, col: number) {
     const pos = `${row},${col}`;
     return this.walls.has(pos) || this.holes.has(pos);
-  }
-
-  calculateSurfaceNormal(point: {
-    x: number;
-    y: number;
-  }): { direction: string; angle: number } | null {
-    const row = Math.floor(point.y / CELL_SIZE);
-    const col = Math.floor(point.x / CELL_SIZE);
-
-    if (this.walls.has(`${row},${col}`)) {
-      const isLeft = point.x % CELL_SIZE < CELL_SIZE / 2;
-      const isTop = point.y % CELL_SIZE < CELL_SIZE / 2;
-      const isRight = !isLeft;
-      const isBottom = !isTop;
-
-      if (isTop) return { direction: "top", angle: 90 };
-      if (isBottom) return { direction: "bottom", angle: -90 };
-      if (isLeft) return { direction: "left", angle: 180 };
-      if (isRight) return { direction: "right", angle: 0 };
-    }
-
-    return null; // Return null if the point doesn't collide with a wall
   }
 
   isWithinBounds(row: number, col: number) {

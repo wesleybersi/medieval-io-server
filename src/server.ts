@@ -3,12 +3,9 @@ import http from "http";
 import { Server, Socket } from "socket.io";
 import { SocketServer } from "./types";
 
-import onConnect from "./events/on-connect";
-import onDisconnect from "./events/on-disconnect";
-
 import Game from "./Game/Game";
-import { randomNum } from "./utilities";
-import { onJoinGame } from "./Game/events/on-player-joins";
+import { disconnectSocket } from "./controllers/disconnect";
+import { connectSocket } from "./controllers/connect";
 
 const port = 2142;
 const app = express();
@@ -28,14 +25,13 @@ const game = new Game({
   type: "Free For All",
   timer: 100,
   floors: {
-    amount: 25,
+    amount: 5,
   },
 });
 
 io.on("connection", (socket: Socket) => {
-  //General server events
-  onConnect(socket);
-  onDisconnect(socket);
+  socket.on("connect", () => connectSocket(socket));
+  socket.on("disconnect", () => disconnectSocket(socket));
   game.onJoinGame(socket);
 });
 

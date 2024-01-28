@@ -1,11 +1,10 @@
 import Game from "../../Game";
-import { CELL_SIZE, MOVEMENT_SPEED, PLAYER_SIZE } from "../../../constants";
-import { Weapon } from "../Weapon/Weapon";
+import { CELL_SIZE, PLAYER_SIZE } from "../../../constants";
+import { Weapon } from "./entities/Weapon/Weapon";
 
-import { Wall } from "../Wall/Wall";
+import { Wall } from "../../Floor/entities/Wall/Wall";
 import { Direction } from "../../../types";
-import { createNewWeapon } from "../Weapon/create-weapon";
-import { Arrow } from "../Weapon/Projectile/projectile-types/Arrow";
+
 import Floor from "../../Floor/Floor";
 import onWeaponChange from "./events/on-weapon-change";
 
@@ -20,15 +19,44 @@ import { updateAngle } from "./controllers/update-angle";
 
 import { action } from "./controllers/action";
 import onActionPress from "./events/on-action-press";
-import { Stairs } from "../Stairs/Stairs";
+
 import { rectanglesAreColliding } from "../../../utilities";
-import { Spikes } from "../Spikes/Spikes";
-import { Pot } from "../Pot/Pot";
+import { Spikes } from "../../Floor/entities/Spikes/Spikes";
+import { Pot } from "../../Floor/entities/Pot/Pot";
+import { Chest } from "../../Floor/entities/Chest/Chest";
+import { Door } from "../../Floor/entities/Door/Door";
+import { Hole } from "../../Floor/entities/Hole/Hole";
+import onReload from "./events/on-reload";
+import { reload } from "./controllers/reload";
+import {
+  getRandomWeaponTier,
+  getRandomWeaponType,
+} from "../../Floor/entities/Pickup/random-weapon";
+import { Shooter } from "../../Floor/entities/Shooter/Shooter";
+import { inventory } from "./controllers/inventory";
+import onInventory from "./events/on-inventory";
+import { InventoryItem } from "./entities/InventoryItem";
+import { createNewWeapon } from "./entities/Weapon/create-weapon";
+
+export interface Dialog {
+  name: string;
+  pages: { text: string }[];
+}
 
 export class Player {
   game: Game;
   socket: Socket;
   floor: Floor;
+  state:
+    | "moving"
+    | "falling"
+    | "attacking"
+    | "swimming"
+    | "in-dialog"
+    | "in-inventory"
+    | "dead"
+    | "chatting" = "moving";
+  inventory: InventoryItem[] = [];
   didDie: boolean = false;
   wasHit: boolean = false;
   id: string;
@@ -37,7 +65,16 @@ export class Player {
   color: number;
   y: number;
   x: number;
+  xSpeed = 0;
+  ySpeed = 0;
+  maxSpeed = 130;
+  acceleration = 32;
+  deceleration = 0.0001;
+
+  rotationSpeed = 375;
   secondsAlive: number = 0;
+  finalSecondsAlive: number = 0;
+  gold: number = 0;
   boundingBox: {
     top: number;
     left: number;
@@ -53,9 +90,19 @@ export class Player {
     centerX: 0,
     centerY: 0,
   };
+  dialog?: { name: string; text: string[] } = {
+    name: "???",
+    text: [
+      "Unwelcome intruder, behold the wretched abyss in which you find yourself. This forsaken ground hungers for souls, and your fate is but a pawn in its malevolent game.",
+      "In the shadows, unseen companions, both ally and foe, tread alongside you, as you hear the distant cries of other cursed wanderers, their destinies intertwined with yours.",
+    ],
+  };
+
+  inputAngle = { target: 0, current: 0 };
   width = PLAYER_SIZE;
   height = PLAYER_SIZE;
   radius = PLAYER_SIZE;
+  carriedItem: Pot | null = null;
   angle: number;
   pointerAngle: number;
   weaponry: Weapon[];
@@ -68,10 +115,10 @@ export class Player {
   touchedCells: string[] = [];
   shift: boolean = false;
   projectiles = {
-    arrows: 25,
+    arrows: 10,
   };
   speedFactor = 1;
-  arrowsAttached = new Set<Arrow>();
+  // arrowsAttached = new Set<Arrow>();
 
   //Events
   onMovement: (socket: Socket) => void = onMovement;
@@ -79,14 +126,18 @@ export class Player {
   onPointerMove: (socket: Socket) => void = onPointerMove;
   onWeaponChange: (socket: Socket) => void = onWeaponChange;
   onActionPress: (socket: Socket) => void = onActionPress;
+  onReload: (socket: Socket) => void = onReload;
+  onInventory: (socket: Socket) => void = onInventory;
 
   //Controllers
   changeWeapon: (index: number) => void = changeWeapon;
   updateCursors: (key: Direction, isDown: boolean) => void = updateCursors;
   updatePointerDown: (button: "left" | "right", isDown: boolean) => void =
     updatePointerDown;
-  updateAngle: (angle: number) => void = updateAngle;
+  updateAngle: (delta: number) => void = updateAngle;
   action: () => void = action;
+  reload: () => void = reload;
+  toggleInventory: () => void = inventory;
 
   constructor(
     socket: Socket,
@@ -106,11 +157,21 @@ export class Player {
     this.y = 0;
     this.x = 0;
     this.pointerAngle = 0;
-    this.weaponIndex = 0;
+    this.weaponIndex = -1; // -1 = no weapon selected
     this.angle = 0;
-    this.weaponry = [
-      createNewWeapon(this, { type: "Bow", tier: "Composite Bow" }),
-    ];
+
+    // const type = getRandomWeaponType();
+
+    // this.weaponry = [
+    //   createNewWeapon(this, {
+    //     type: type,
+    //     tier: getRandomWeaponTier(type),
+    //   }),
+    // ];
+
+    // this.weaponry = [createNewWeapon(this, { type: "Sword", tier: "Sword" })];
+    this.weaponry = [];
+
     this.floor.addPlayer(this);
 
     //Enable events
@@ -119,15 +180,37 @@ export class Player {
     this.onPointerMove(socket);
     this.onWeaponChange(socket);
     this.onActionPress(socket);
+    this.onReload(socket);
+    this.onInventory(socket);
   }
 
   update(delta: number, counter: number) {
+    if (this.state === "in-inventory" || this.state === "in-dialog") return;
     this.wasHit = false;
-    if (this.health <= 0) {
+
+    if ((!this.didDie && this.health <= 0) || this.state === "falling") {
+      setTimeout(() => {
+        this.state = "dead";
+      }, 1500);
       this.health = 0;
+      this.finalSecondsAlive = this.secondsAlive;
+      this.secondsAlive = 0;
       this.didDie = true;
+    } else if (this.didDie) {
+      if (this.carriedItem) {
+        this.carriedItem.fall(this);
+        this.carriedItem = null;
+      }
+      return;
     }
-    if (this.didDie) return;
+
+    if (this.carriedItem) {
+      if (this.isPointerJustDown.left) {
+        this.carriedItem.throw(this, this.angle);
+      } else {
+        this.carriedItem.update(this.x, this.y - CELL_SIZE * 0.75);
+      }
+    }
 
     if (counter % 6 === 0) {
       for (const pos of this.touchedCells) {
@@ -158,65 +241,70 @@ export class Player {
       }
     }
 
-    if (this.cursors.length > 0) {
-      this.move(delta);
+    this.updateAngle(delta);
+    this.handleInput();
+    this.applyMovement(delta);
+
+    if (this.xSpeed > 0 && this.xSpeed < 2) {
+      this.xSpeed = 0;
+    }
+    if (this.xSpeed < 0 && this.xSpeed > -2) {
+      this.xSpeed = 0;
+    }
+    if (this.ySpeed > 0 && this.ySpeed < 2) {
+      this.ySpeed = 0;
+    }
+    if (this.ySpeed < 0 && this.ySpeed > -2) {
+      this.ySpeed = 0;
     }
 
-    this.weaponry[this.weaponIndex]?.update();
+    if (this.weaponIndex >= 0) {
+      this.weaponry[this.weaponIndex]?.update(delta);
+      if (this.weaponry[this.weaponIndex]?.durability.current <= 0) {
+        this.weaponry.splice(this.weaponIndex, 1);
+        this.weaponIndex = -1;
+      }
+    }
 
     //Always reverts to false
     this.isPointerJustDown.left = false;
     this.isPointerJustDown.right = false;
   }
 
-  hurt(value: number) {
-    this.health -= value;
-    this.wasHit = true;
+  handleInput() {
+    // Assuming you have some way to detect input (e.g., key presses)
+    const horizontalInput =
+      (this.cursors.includes("right") ? 1 : 0) -
+      (this.cursors.includes("left") ? 1 : 0);
+    const verticalInput =
+      (this.cursors.includes("down") ? 1 : 0) -
+      (this.cursors.includes("up") ? 1 : 0);
+
+    // Diagonal movement should be equally as fast as horizontal/vertical movement
+    const diagonalFactor = Math.sqrt(2) / 2;
+
+    this.xSpeed += horizontalInput * this.acceleration * diagonalFactor;
+    this.ySpeed += verticalInput * this.acceleration * diagonalFactor;
   }
-  moveToCell(row: number, col: number) {
-    if (!this.game) return;
-    this.x = col * CELL_SIZE + CELL_SIZE / 2;
-    this.y = row * CELL_SIZE + CELL_SIZE / 2;
-    this.floor.trackPosition(this);
-  }
 
-  move(delta: number) {
-    let x = this.x;
-    let y = this.y;
-    const movementSpeed = MOVEMENT_SPEED * this.speedFactor;
-    const diagonalSpeed = movementSpeed * Math.sqrt(2); // Calculate diagonal speed using Pythagorean theorem (a^2 + b^2 = c^2)
+  applyMovement(delta: number) {
+    if (this.state === "falling") return;
+    // Apply deceleration
+    this.xSpeed *= Math.pow(this.deceleration, delta);
+    this.ySpeed *= Math.pow(this.deceleration, delta);
 
-    let xSpeed = 0;
-    let ySpeed = 0;
-
-    for (const key of this.cursors) {
-      switch (key) {
-        case "up":
-          ySpeed -= diagonalSpeed;
-          break;
-        case "down":
-          ySpeed += diagonalSpeed;
-          break;
-        case "left":
-          xSpeed -= diagonalSpeed;
-          break;
-        case "right":
-          xSpeed += diagonalSpeed;
-          break;
-      }
+    // Limit speed
+    const speed = Math.sqrt(this.xSpeed ** 2 + this.ySpeed ** 2);
+    if (speed > this.maxSpeed) {
+      const ratio = this.maxSpeed / speed;
+      this.xSpeed *= ratio;
+      this.ySpeed *= ratio;
     }
 
-    // Normalize the movement vector
-    const magnitude = Math.sqrt(xSpeed * xSpeed + ySpeed * ySpeed);
-    if (magnitude > diagonalSpeed) {
-      xSpeed = (xSpeed / magnitude) * diagonalSpeed;
-      ySpeed = (ySpeed / magnitude) * diagonalSpeed;
-    }
+    let x = this.x + this.xSpeed * delta;
+    let y = this.y + this.ySpeed * delta;
 
-    // Update the position using the normalized speeds
-    x = Math.round(x + xSpeed * delta);
-    y = Math.round(y + ySpeed * delta);
-
+    const direction = getDirection(this.xSpeed, this.ySpeed);
     const boundingBox = {
       top: y - this.height / 2,
       bottom: y + this.height / 2,
@@ -225,16 +313,16 @@ export class Player {
       centerX: x,
       centerY: y,
     };
-
-    const direction = getDirection(xSpeed, ySpeed);
-    let movingTiles = false;
-
-    //Tile movement
     for (const pos of this.touchedCells) {
       const cell = this.floor.tracker.get(pos);
       if (!cell) continue;
       for (const obj of cell) {
-        if (obj instanceof Wall) {
+        if (
+          obj instanceof Wall ||
+          obj instanceof Pot ||
+          obj instanceof Chest ||
+          (obj instanceof Door && !obj.isOpen)
+        ) {
           const wall = obj;
           const collidesAt = wall.getCollisionSide(boundingBox);
           if (collidesAt !== "none") {
@@ -252,20 +340,23 @@ export class Player {
             this.direction = direction;
             this.floor.trackPosition(this, this.width + 8, this.height + 8);
           }
+        } else if (obj instanceof Hole) {
+          if (
+            obj.isRectCompletelyOverlapping(
+              this.x,
+              this.y,
+              this.width,
+              this.height
+            )
+          ) {
+            this.state = "falling";
+          }
+        } else if (obj instanceof Shooter) {
+          if (obj.isRectOverlapping(this.x, this.y, this.width, this.height)) {
+            obj.shoot();
+          }
         }
       }
-    }
-
-    // if (!movingTiles) {
-    //   this.speedFactor = 1;
-    // }
-
-    //Update player position
-
-    for (const arrow of this.arrowsAttached) {
-      arrow.x += xSpeed * delta;
-      arrow.y += ySpeed * delta;
-      arrow.emit = true;
     }
 
     this.x = x;
@@ -275,6 +366,18 @@ export class Player {
 
     this.floor.trackPosition(this, this.width + 8, this.height + 8);
   }
+
+  hurt(value: number) {
+    this.health -= value;
+    this.wasHit = true;
+  }
+  moveToCell(row: number, col: number) {
+    if (!this.game) return;
+    this.x = col * CELL_SIZE + CELL_SIZE / 2;
+    this.y = row * CELL_SIZE + CELL_SIZE / 2;
+    this.floor.trackPosition(this);
+  }
+
   doesCollide(x: number, y: number) {
     return !(
       x < this.x - PLAYER_SIZE / 2 ||
