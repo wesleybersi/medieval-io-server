@@ -7,10 +7,11 @@ import { WeaponPickup } from "../../../Floor/entities/Pickup/Pickup";
 import { Pot } from "../../../Floor/entities/Pot/Pot";
 import { Stairs } from "../../../Floor/entities/Stairs/Stairs";
 
-import { Projectile } from "../../Projectile/Projectile";
+import { Projectile } from "../../../Floor/entities/Projectile/Projectile";
 
 import { Player } from "../Player";
 import { Sign } from "../../../Floor/entities/Sign/Sign";
+import { Collider } from "../../Collider/Collider";
 
 export function action(this: Player) {
   if (this.state === "in-dialog" || this.dialog) {
@@ -28,68 +29,56 @@ export function action(this: Player) {
   }
 
   for (const pos of this.touchedCells) {
-    const cell = this.floor.tracker.get(pos);
+    const cell = this.floor.tracker.cells.get(pos);
     if (!cell) continue;
     for (const obj of Array.from(cell).sort((obj) =>
       obj instanceof Projectile ? 1 : -1
     )) {
-      if (obj instanceof Projectile) {
-        if (obj.state.startsWith("on")) {
-          obj.get(this);
-          return;
-        }
-      } else if (obj instanceof WeaponPickup) {
+      if (obj instanceof WeaponPickup) {
         const pickup = obj;
         pickup.get(this);
-      } else if (obj instanceof Chest) {
-        const chest = obj;
-        if (!chest.isOpen && chest.y < this.y) {
-          chest.open();
-          this.dialog = {
-            name: "Ariel",
-            text: [
-              "I see you just opened a chest.",
-              "That is really cool.",
-              "Far out.",
-            ],
-          };
-          return;
+        break;
+      } else if (obj instanceof Collider) {
+        // if (obj instanceof Pot) {
+        // this.inventory.deselectHotKey();
+        // obj.carry(this);
+        // break;
+        if (obj instanceof Projectile) {
+          if (obj.state.startsWith("on")) {
+            obj.get(this);
+            return;
+          }
+        } else if (obj instanceof Stairs) {
+          if (obj.overlapsWith(this.boundingBox)) obj.enter(this);
+          break;
+        } else if (obj instanceof Sign) {
+          obj.read(this);
+          break;
+        } else if (obj instanceof Door) {
+          const door = obj;
+          if (door.isOpen) {
+            // if (
+            // door.overlapsWith(this.boundingBox)
+            //Prevent being pushed into wall by closing door
+            // ) {
+            // continue;
+            // }
+            door.close();
+            break;
+          } else {
+            door.open(this.x, this.y);
+            break;
+          }
+        } else if (obj instanceof ItemDrop) {
+          obj.get(this);
+          break;
+        } else if (obj instanceof Chest) {
+          const chest = obj;
+          if (!chest.isOpen && chest.y < this.y) {
+            chest.open();
+            break;
+          }
         }
-      } else if (obj instanceof Door) {
-        const door = obj;
-        if (door.isOpen) {
-          door.close();
-          return;
-        } else {
-          door.open(this.x, this.y);
-          return;
-        }
-      } else if (obj instanceof Pot) {
-        this.weaponIndex = -1;
-        const pot = obj;
-        pot.carry(this);
-      } else if (obj instanceof Sign) {
-        const sign = obj;
-        sign.read(this);
-      } else if (obj instanceof Stairs) {
-        const stairs = obj;
-        if (
-          rectanglesAreColliding(
-            { x: this.x, y: this.y, width: this.width, height: this.height },
-            {
-              x: stairs.col * CELL_SIZE + CELL_SIZE / 2,
-              y: stairs.row * CELL_SIZE + CELL_SIZE / 2,
-              width: CELL_SIZE,
-              height: CELL_SIZE,
-            }
-          )
-        ) {
-          stairs.enter(this);
-          return;
-        }
-      } else if (obj instanceof ItemDrop) {
-        const item = obj;
-        item.get(this);
       }
     }
   }

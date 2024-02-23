@@ -1,3 +1,4 @@
+import { allWeapons } from "../../data/weapons";
 import Game from "../../Game";
 import { CELL_SIZE, PLAYER_SIZE } from "../../../constants";
 import { Weapon } from "./entities/Weapon/Weapon";
@@ -20,30 +21,26 @@ import { updateAngle } from "./controllers/update-angle";
 import { action } from "./controllers/action";
 import onActionPress from "./events/on-action-press";
 
-import { rectanglesAreColliding } from "../../../utilities";
+import { randomNum } from "../../../utilities";
 import { Spikes } from "../../Floor/entities/Spikes/Spikes";
 import { Pot } from "../../Floor/entities/Pot/Pot";
-import { Chest } from "../../Floor/entities/Chest/Chest";
-import { Door } from "../../Floor/entities/Door/Door";
 import { Hole } from "../../Floor/entities/Hole/Hole";
 import onReload from "./events/on-reload";
 import { reload } from "./controllers/reload";
-import {
-  getRandomWeaponTier,
-  getRandomWeaponType,
-} from "../../Floor/entities/Pickup/random-weapon";
 import { Shooter } from "../../Floor/entities/Shooter/Shooter";
 import { inventory } from "./controllers/inventory";
-import onInventory from "./events/on-inventory";
-import { InventoryItem } from "./entities/InventoryItem";
-import { createNewWeapon } from "./entities/Weapon/create-weapon";
+import { onInventory } from "./events/on-inventory";
+import { Collider } from "../Collider/Collider";
+import { Inventory } from "./entities/Inventory/Inventory";
+import { onCustomizeBow } from "./events/on-customize";
+import { Projectile } from "../../Floor/entities/Projectile/Projectile";
 
 export interface Dialog {
   name: string;
   pages: { text: string }[];
 }
 
-export class Player {
+export class Player extends Collider {
   game: Game;
   socket: Socket;
   floor: Floor;
@@ -56,40 +53,30 @@ export class Player {
     | "in-inventory"
     | "dead"
     | "chatting" = "moving";
-  inventory: InventoryItem[] = [];
+
+  inventory: Inventory;
+  activeWeapon: Weapon | null = null;
+
   didDie: boolean = false;
   wasHit: boolean = false;
   id: string;
   name: string;
   health: number;
   color: number;
-  y: number;
-  x: number;
-  xSpeed = 0;
-  ySpeed = 0;
-  maxSpeed = 130;
-  acceleration = 32;
-  deceleration = 0.0001;
+  velocityX = 0;
+  velocityY = 0;
+  // maxSpeed = 130;
+  // acceleration = 32;
+  initialMaxSpeed = 1200;
+  initialAcceleration = 185;
+  initialDeceleration = 0.0006;
 
-  rotationSpeed = 375;
+  maxSpeed = 1200;
+  acceleration = 185;
+  deceleration = 0.0006;
   secondsAlive: number = 0;
   finalSecondsAlive: number = 0;
   gold: number = 0;
-  boundingBox: {
-    top: number;
-    left: number;
-    right: number;
-    bottom: number;
-    centerX: number;
-    centerY: number;
-  } = {
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    centerX: 0,
-    centerY: 0,
-  };
   dialog?: { name: string; text: string[] } = {
     name: "???",
     text: [
@@ -98,28 +85,28 @@ export class Player {
     ],
   };
 
-  inputAngle = { target: 0, current: 0 };
-  width = PLAYER_SIZE;
-  height = PLAYER_SIZE;
-  radius = PLAYER_SIZE;
-  carriedItem: Pot | null = null;
+  rotationSpeed = 400;
+  targetAngle = 0; //Angle will always lerp towards targetAngle
   angle: number;
-  pointerAngle: number;
-  weaponry: Weapon[];
-  weaponIndex: number;
+
+  bowCustomization = {
+    drawSpeed: 2, //0,1,2,3,4
+    velocity: 2,
+    accuracy: 2,
+  };
+
+  carriedItem: Pot | null = null;
   cursors: Direction[] = [];
   direction = "";
   isPointerDown = { left: false, right: false };
   isPointerJustDown = { left: false, right: false };
+  attachedProjectiles: Map<[number, number], Projectile> = new Map(); //xOffset,yOffset,Projectile
   force = 0;
   touchedCells: string[] = [];
   shift: boolean = false;
   projectiles = {
-    arrows: 10,
+    arrows: 100,
   };
-  speedFactor = 1;
-  // arrowsAttached = new Set<Arrow>();
-
   //Events
   onMovement: (socket: Socket) => void = onMovement;
   onPointerDown: (socket: Socket) => void = onPointerDown;
@@ -128,6 +115,7 @@ export class Player {
   onActionPress: (socket: Socket) => void = onActionPress;
   onReload: (socket: Socket) => void = onReload;
   onInventory: (socket: Socket) => void = onInventory;
+  onCustomizeBow: (socket: Socket) => void = onCustomizeBow;
 
   //Controllers
   changeWeapon: (index: number) => void = changeWeapon;
@@ -147,6 +135,7 @@ export class Player {
     name: string,
     color: number
   ) {
+    super(0, 0, PLAYER_SIZE, PLAYER_SIZE, true);
     this.id = id;
     this.game = game;
     this.floor = floor;
@@ -154,24 +143,8 @@ export class Player {
     this.name = name;
     this.color = color;
     this.health = 100;
-    this.y = 0;
-    this.x = 0;
-    this.pointerAngle = 0;
-    this.weaponIndex = -1; // -1 = no weapon selected
     this.angle = 0;
-
-    // const type = getRandomWeaponType();
-
-    // this.weaponry = [
-    //   createNewWeapon(this, {
-    //     type: type,
-    //     tier: getRandomWeaponTier(type),
-    //   }),
-    // ];
-
-    // this.weaponry = [createNewWeapon(this, { type: "Sword", tier: "Sword" })];
-    this.weaponry = [];
-
+    this.inventory = new Inventory(this, 3, 3);
     this.floor.addPlayer(this);
 
     //Enable events
@@ -182,6 +155,13 @@ export class Player {
     this.onActionPress(socket);
     this.onReload(socket);
     this.onInventory(socket);
+    this.onCustomizeBow(socket);
+  }
+
+  resetMovementValues() {
+    this.maxSpeed = this.initialMaxSpeed;
+    this.acceleration = this.initialAcceleration;
+    this.deceleration = this.initialDeceleration;
   }
 
   update(delta: number, counter: number) {
@@ -208,61 +188,37 @@ export class Player {
       if (this.isPointerJustDown.left) {
         this.carriedItem.throw(this, this.angle);
       } else {
-        this.carriedItem.update(this.x, this.y - CELL_SIZE * 0.75);
+        this.carriedItem.x = this.x;
+        this.carriedItem.y = this.y;
+        this.carriedItem.update(delta);
       }
     }
 
-    if (counter % 6 === 0) {
-      for (const pos of this.touchedCells) {
-        const cell = this.floor.tracker.get(pos);
-        if (!cell) continue;
-        for (const obj of cell) {
-          if (obj instanceof Spikes && obj.state === "on") {
-            if (
-              rectanglesAreColliding(
-                {
-                  x: this.x,
-                  y: this.y,
-                  width: this.width * 0.5,
-                  height: this.height * 0.5,
-                },
-                {
-                  x: obj.col * CELL_SIZE,
-                  y: obj.row * CELL_SIZE,
-                  width: CELL_SIZE,
-                  height: CELL_SIZE,
-                }
-              )
-            ) {
-              this.hurt(5);
-            }
-          }
-        }
-      }
-    }
-
+    this.handleFloor(counter);
     this.updateAngle(delta);
     this.handleInput();
     this.applyMovement(delta);
 
-    if (this.xSpeed > 0 && this.xSpeed < 2) {
-      this.xSpeed = 0;
+    if (this.velocityX > 0 && this.velocityX < 2) {
+      this.velocityX = 0;
     }
-    if (this.xSpeed < 0 && this.xSpeed > -2) {
-      this.xSpeed = 0;
+    if (this.velocityX < 0 && this.velocityX > -2) {
+      this.velocityX = 0;
     }
-    if (this.ySpeed > 0 && this.ySpeed < 2) {
-      this.ySpeed = 0;
+    if (this.velocityY > 0 && this.velocityY < 2) {
+      this.velocityY = 0;
     }
-    if (this.ySpeed < 0 && this.ySpeed > -2) {
-      this.ySpeed = 0;
+    if (this.velocityY < 0 && this.velocityY > -2) {
+      this.velocityY = 0;
     }
 
-    if (this.weaponIndex >= 0) {
-      this.weaponry[this.weaponIndex]?.update(delta);
-      if (this.weaponry[this.weaponIndex]?.durability.current <= 0) {
-        this.weaponry.splice(this.weaponIndex, 1);
-        this.weaponIndex = -1;
+    if (this.activeWeapon) {
+      this.inventory.updateDurability(this.activeWeapon?.durability?.current);
+      this.activeWeapon?.update(delta);
+      if (this.activeWeapon?.durability?.current <= 0) {
+        this.activeWeapon = null;
+        this.inventory.hotkeys[this.inventory.hotkeyIndex] = null;
+        this.inventory.hotkeyIndex = -1;
       }
     }
 
@@ -283,77 +239,81 @@ export class Player {
     // Diagonal movement should be equally as fast as horizontal/vertical movement
     const diagonalFactor = Math.sqrt(2) / 2;
 
-    this.xSpeed += horizontalInput * this.acceleration * diagonalFactor;
-    this.ySpeed += verticalInput * this.acceleration * diagonalFactor;
+    this.velocityX += horizontalInput * this.acceleration * diagonalFactor;
+    this.velocityY += verticalInput * this.acceleration * diagonalFactor;
   }
 
   applyMovement(delta: number) {
     if (this.state === "falling") return;
     // Apply deceleration
-    this.xSpeed *= Math.pow(this.deceleration, delta);
-    this.ySpeed *= Math.pow(this.deceleration, delta);
+    this.velocityX *= Math.pow(this.deceleration, delta);
+    this.velocityY *= Math.pow(this.deceleration, delta);
 
     // Limit speed
-    const speed = Math.sqrt(this.xSpeed ** 2 + this.ySpeed ** 2);
+    const speed = Math.sqrt(this.velocityX ** 2 + this.velocityY ** 2);
     if (speed > this.maxSpeed) {
       const ratio = this.maxSpeed / speed;
-      this.xSpeed *= ratio;
-      this.ySpeed *= ratio;
+      this.velocityX *= ratio;
+      this.velocityY *= ratio;
     }
 
-    let x = this.x + this.xSpeed * delta;
-    let y = this.y + this.ySpeed * delta;
+    let x = this.x + this.velocityX * delta;
+    let y = this.y + this.velocityY * delta;
 
-    const direction = getDirection(this.xSpeed, this.ySpeed);
+    const direction = getDirection(this.velocityX, this.velocityY);
     const boundingBox = {
       top: y - this.height / 2,
       bottom: y + this.height / 2,
       left: x - this.width / 2,
       right: x + this.width / 2,
-      centerX: x,
-      centerY: y,
     };
+
+    let collideWithCrate = false;
     for (const pos of this.touchedCells) {
-      const cell = this.floor.tracker.get(pos);
+      const cell = this.floor.tracker.cells.get(pos);
       if (!cell) continue;
       for (const obj of cell) {
-        if (
-          obj instanceof Wall ||
-          obj instanceof Pot ||
-          obj instanceof Chest ||
-          (obj instanceof Door && !obj.isOpen)
-        ) {
-          const wall = obj;
-          const collidesAt = wall.getCollisionSide(boundingBox);
-          if (collidesAt !== "none") {
-            //Does not return, so it can check multiple collisions
-            if (collidesAt === "top") {
-              y = wall.boundingBox.top - this.height / 2;
-            } else if (collidesAt === "bottom") {
-              y = wall.boundingBox.bottom + this.height / 2;
-            } else if (collidesAt === "left") {
-              x = wall.boundingBox.left - this.width / 2;
-            } else if (collidesAt === "right") {
-              x = wall.boundingBox.right + this.width / 2;
-            }
+        if (obj === this) continue;
+        if (obj instanceof Collider) {
+          if (obj.isObstructing) {
+            const collidesAt = obj.getCollisionSide(
+              boundingBox,
+              obj instanceof Wall ? obj.adjacentWalls : undefined
+            );
+            if (collidesAt) {
+              if (obj instanceof Pot) {
+                collideWithCrate = true;
+                // Limit this.maxSpeed to obj.maxSpeed
+                this.maxSpeed = obj.maxSpeed;
+                // Adjust velocities proportionally to the new maxSpeed
+                const ratio = obj.maxSpeed / this.maxSpeed;
+                this.velocityX *= ratio;
+                this.velocityY *= ratio;
+              }
+              if (collidesAt === "top") {
+                y = obj.boundingBox.top - this.height / 2;
+                if (obj instanceof Pot) obj.applyMovement(delta, "down");
+              } else if (collidesAt === "bottom") {
+                y = obj.boundingBox.bottom + this.height / 2;
+                if (obj instanceof Pot) obj.applyMovement(delta, "up");
+              } else if (collidesAt === "left") {
+                x = obj.boundingBox.left - this.width / 2;
+                if (obj instanceof Pot) obj.applyMovement(delta, "right");
+              } else if (collidesAt === "right") {
+                x = obj.boundingBox.right + this.width / 2;
+                if (obj instanceof Pot) obj.applyMovement(delta, "left");
+              }
 
-            this.direction = direction;
-            this.floor.trackPosition(this, this.width + 8, this.height + 8);
-          }
-        } else if (obj instanceof Hole) {
-          if (
-            obj.isRectCompletelyOverlapping(
-              this.x,
-              this.y,
-              this.width,
-              this.height
-            )
-          ) {
-            this.state = "falling";
-          }
-        } else if (obj instanceof Shooter) {
-          if (obj.isRectOverlapping(this.x, this.y, this.width, this.height)) {
-            obj.shoot();
+              this.direction = direction;
+            }
+          } else {
+            if (obj instanceof Hole) {
+              if (obj.completelyOverlapsWith(boundingBox)) {
+                this.state = "falling";
+              }
+            } else if (obj instanceof Shooter) {
+              if (obj.overlapsWith(boundingBox)) obj.shoot();
+            }
           }
         }
       }
@@ -362,9 +322,30 @@ export class Player {
     this.x = x;
     this.y = y;
     this.direction = direction;
-    this.boundingBox = boundingBox;
+    this.updateBoundingBox();
 
-    this.floor.trackPosition(this, this.width + 8, this.height + 8);
+    if (!collideWithCrate) this.resetMovementValues();
+
+    this.floor.tracker.track(this);
+  }
+  handleFloor(counter: number) {
+    if (counter % 6 === 0) {
+      for (const pos of this.touchedCells) {
+        const cell = this.floor.tracker.cells.get(pos);
+        if (!cell) continue;
+        for (const obj of cell) {
+          if (obj instanceof Collider) {
+            if (!obj.isObstructing) {
+              if (obj.overlapsWith(this.boundingBox)) {
+                if (obj instanceof Spikes && obj.state === "on") {
+                  this.hurt(5);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   hurt(value: number) {
@@ -375,7 +356,7 @@ export class Player {
     if (!this.game) return;
     this.x = col * CELL_SIZE + CELL_SIZE / 2;
     this.y = row * CELL_SIZE + CELL_SIZE / 2;
-    this.floor.trackPosition(this);
+    this.floor.tracker.track(this);
   }
 
   doesCollide(x: number, y: number) {
@@ -385,16 +366,6 @@ export class Player {
       y < this.y - PLAYER_SIZE / 2 ||
       y > this.y - PLAYER_SIZE / 2 + PLAYER_SIZE
     );
-  }
-  setBoundingBox() {
-    this.boundingBox = {
-      top: this.y - this.height / 2,
-      bottom: this.y + this.height / 2,
-      left: this.x - this.width / 2,
-      right: this.x + this.width / 2,
-      centerX: this.x,
-      centerY: this.y,
-    };
   }
 }
 

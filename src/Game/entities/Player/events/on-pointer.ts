@@ -12,6 +12,6 @@ export function onPointerDown(this: Player, socket: Socket) {
 
 export function onPointerMove(this: Player, socket: Socket) {
   socket.on("Player Angle", (angle: number) => {
-    this.inputAngle.target = angle;
+    this.targetAngle = angle;
   });
 }

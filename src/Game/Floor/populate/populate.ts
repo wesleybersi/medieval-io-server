@@ -1,9 +1,15 @@
-import { randomNum } from "../../../utilities";
+import { Sign } from "./../entities/Sign/Sign";
+import { getRandomInt, oneIn, randomNum } from "../../../utilities";
 import { Hole } from "../entities/Hole/Hole";
 import { Spikes } from "../entities/Spikes/Spikes";
 import { Wall } from "../entities/Wall/Wall";
 import Floor from "../Floor";
-import { DungeonGenerator } from "./DungeonGenerator/DungeonGenerator";
+import { DungeonGenerator } from "../../entities/DungeonGenerator/DungeonGenerator";
+import { Pot } from "../entities/Pot/Pot";
+import { CELL_SIZE } from "../../../constants";
+import { Door } from "../entities/Door/Door";
+import { Shooter } from "../entities/Shooter/Shooter";
+import { Direction } from "../../../types";
 
 export interface PopulateConfig {
   iterations: number;
@@ -31,7 +37,6 @@ export function populate(this: Floor, config: PopulateConfig) {
           {
             new Spikes(this, y, x, {
               initialState: cell.endsWith("off") ? "off" : "on",
-              globalTimer: 120,
             });
           }
           break;
@@ -40,14 +45,10 @@ export function populate(this: Floor, config: PopulateConfig) {
         case "wall-torch":
           {
             new Wall(this, y, x);
-            // new Hole(this, y, x);
-            // this.objectMatrix[y][x] = "hole";
           }
           break;
 
         case "surrounded-wall":
-          // new Hole(this, y, x);
-          // this.objectMatrix[y][x] = "hole";
           break;
         case "hole":
           new Hole(this, y, x);
@@ -56,124 +57,109 @@ export function populate(this: Floor, config: PopulateConfig) {
     });
   });
 
-  //   //ANCHOR Surround new rooms with walls
-  //   this.matrix.forEach((row, y) => {
-  //     row.forEach((cell, x) => {
-  //       if (cell === "floor") {
-  //         const cellAbove = this.matrix[y - 1] ? this.matrix[y - 1][x] : null;
-  //         const cellBelow = this.matrix[y + 1] ? this.matrix[y + 1][x] : null;
-  //         const cellRight = this.matrix[y][x + 1] ?? null;
-  //         const cellLeft = this.matrix[y][x - 1] ?? null;
-
-  //         if (cellAbove && cellAbove === "surrounded-wall") {
-  //           this.matrix[y - 1][x] = "wall";
-  //           new Wall(this, y - 1, x);
-  //         }
-  //         if (cellBelow && cellBelow === "surrounded-wall") {
-  //           this.matrix[y + 1][x] = "wall";
-  //           new Wall(this, y + 1, x);
-  //         }
-  //         if (cellRight && cellRight === "surrounded-wall") {
-  //           this.matrix[y][x + 1] = "wall";
-  //           new Wall(this, y, x + 1);
-  //         }
-  //         if (cellLeft && cellLeft === "surrounded-wall") {
-  //           this.matrix[y][x - 1] = "wall";
-  //           new Wall(this, y, x - 1);
-  //         }
-  //       }
-  //     });
-  //   });
-  // };
-
-  // for (let i = 0; i < config.roomDepth; i++) {
-  //   createRooms();
-  //   createRooms();
-  // }
-
-  // //Find places to create rooms
-
-  // // const dampen = () => {
-  // //   this.matrix.forEach((row, y) => {
-  // //     row.forEach((cell, x) => {
-  // //       if (cell === "wall") {
-  // //         const cellAbove = this.matrix[y - 1] ? this.matrix[y - 1][x] : null;
-  // //         const cellBelow = this.matrix[y + 1] ? this.matrix[y + 1][x] : null;
-  // //         const cellRight = this.matrix[y][x + 1] ?? null;
-  // //         const cellLeft = this.matrix[y][x - 1] ?? null;
-
-  // //         const arr = [];
-  // //         if (cellAbove) arr.push(cellAbove);
-  // //         if (cellBelow) arr.push(cellBelow);
-  // //         if (cellRight) arr.push(cellRight);
-  // //         if (cellLeft) arr.push(cellLeft);
-
-  // //         if (arr.length === 1) {
-  // //           this.matrix[y][x] = "floor";
-  // //           this.walls.get(`${y},${x}`)?.remove();
-  // //         }
-  // //       }
-  // //     });
-  // //   });
-  // // };
-  // // dampen();
-  // // dampen();
-  // // dampen();
-
-  // //ANCHOR Recheck surrounded walls and place items
-  // this.matrix.forEach((row, y) => {
-  //   const torchRange = Math.max(randomNum(10), 3);
-  //   row.forEach((cell, x) => {
-  //     if (cell === "surrounded-wall") {
-  //       if (!isWallSurrounded(this.matrix, y, x)) {
-  //         this.matrix[y][x] = "wall";
-  //         new Wall(this, y, x);
-  //       }
-  //     } else if (cell === "floor") {
-  //       if (isWallSurrounded(this.matrix, y, x)) {
-  //         this.matrix[y][x] = "wall";
-  //         new Wall(this, y, x);
-  //       } else {
-  //         //ANCHOR Place random items like pots and chests
-  //         if (
-  //           (row[x - 1] && row[x - 1] === "wall") ||
-  //           (row[x + 1] && row[x + 1] === "wall") ||
-  //           (this.matrix[y - 1] && this.matrix[y - 1][x] === "wall") ||
-  //           (this.matrix[y + 1] && this.matrix[y + 1][x] === "wall") ||
-  //           oneIn(16)
-  //         ) {
-  //           if (oneIn(32)) new Pot(this, y, x);
-  //         } else {
-  //           // if (oneIn(400)) {
-  //           //   if (
-  //           //     this.matrix[y + 1] &&
-  //           //     this.matrix[y + 1][x] &&
-  //           //     this.matrix[y + 1][x] === "floor"
-  //           //   ) {
-  //           //     new Chest(this, y, x);
-  //           //   }
-  //           // }
-  //         }
-  //       }
-  //     } else if (cell === "wall") {
-  //       const cellAbove = this.matrix[y - 1] ? this.matrix[y - 1][x] : null;
-  //       const cellBelow = this.matrix[y + 1] ? this.matrix[y + 1][x] : null;
-  //       if (
-  //         cellAbove &&
-  //         cellAbove === "surrounded-wall" &&
-  //         cellBelow &&
-  //         cellBelow === "floor"
-  //       ) {
-  //         if (x % torchRange === 0) {
-  //           this.decoration.torches.push({ row: y, col: x });
-  //         }
-  //       }
-  //     }
-  //   });
-  // });
+  for (const [pos, sprite] of this.spriteGridMatrix) {
+    const [row, col] = pos.split(",").map((pos) => parseInt(pos));
+    switch (sprite) {
+      case "sign-rectangle":
+        new Sign(this, row, col, ["Lorem ipsum", "Bacakigloui"]);
+        break;
+      // case "horz-door-closed-up":
+      //   {
+      //     const neighbor = this.spriteGridMatrix.get(`${row},${col - 1}`);
+      //     if (neighbor && neighbor === sprite) {
+      //       this.spriteGridMatrix.delete(`${row},${col}`);
+      //       break;
+      //     }
+      //     new Door(this, "horizontal", "up", row, col);
+      //   }
+      //   break;
+      // case "horz-door-closed-down":
+      //   {
+      //     const neighbor = this.spriteGridMatrix.get(`${row},${col - 1}`);
+      //     if (neighbor && neighbor === sprite) {
+      //       this.spriteGridMatrix.delete(`${row},${col}`);
+      //       break;
+      //     }
+      //     new Door(this, "horizontal", "down", row, col);
+      //   }
+      //   break;
+      // case "vert-door-closed-left":
+      //   {
+      //     const neighbor = this.spriteGridMatrix.get(`${row - 1},${col}`);
+      //     if (neighbor && neighbor === sprite) {
+      //       this.spriteGridMatrix.delete(`${row},${col}`);
+      //       break;
+      //     }
+      //     new Door(this, "vertical", "left", row, col);
+      //   }
+      //   break;
+      // case "vert-door-closed-left":
+      //   {
+      //     const neighbor = this.spriteGridMatrix.get(`${row - 1},${col}`);
+      //     if (neighbor && neighbor === sprite) {
+      //       this.spriteGridMatrix.delete(`${row},${col}`);
+      //       break;
+      //     }
+      //     new Door(this, "vertical", "right", row, col);
+      //   }
+      //   break;
+      case "shooter-up":
+      case "shooter-down":
+      case "shooter-left":
+      case "shooter-right":
+        new Shooter(this, row, col, sprite.slice(8) as Direction);
+        break;
+    }
+  }
 
   this.rows = this.objectMatrix.length;
   this.cols = this.objectMatrix[0].length;
+
+  const potIterations = Math.floor((this.rows * this.cols) / 125);
+  for (let i = 0; i < potIterations; i++) {
+    if (oneIn(6)) {
+      const { row, col } = this.getRandomEmptyCell();
+
+      if (
+        this.isEmptyCell(row, col) &&
+        this.isEmptyCell(row, col + 1) &&
+        this.isEmptyCell(row + 1, col) &&
+        this.isEmptyCell(row + 1, col + 1)
+      ) {
+        new Pot(this, col, row, true);
+      }
+    } else {
+      const { row, col } = this.getRandomEmptyCell();
+      new Pot(this, col, row);
+      if (oneIn(6)) {
+        if (this.isEmptyCell(row + 1, col)) {
+          new Pot(this, col, row + 1);
+        }
+      }
+      if (oneIn(6)) {
+        if (this.isEmptyCell(row - 1, col)) {
+          new Pot(this, col, row - 1);
+        }
+      }
+      if (oneIn(6)) {
+        if (this.isEmptyCell(row, col + 1)) {
+          new Pot(this, col + 1, row);
+        }
+      }
+      if (oneIn(6)) {
+        if (this.isEmptyCell(row, col - 1)) {
+          new Pot(this, col - 1, row);
+        }
+      }
+    }
+  }
+
+  //Crates are let loose
+  for (const [pos, sprite] of this.spriteGridMatrix) {
+    if (sprite.includes("crate")) {
+      this.spriteGridMatrix.delete(pos);
+    }
+  }
 
   console.log("Grid:", this.rows, "rows by", this.cols, "cols");
 
@@ -182,6 +168,7 @@ export function populate(this: Floor, config: PopulateConfig) {
       wall.remove();
       continue;
     }
+
     const top = this.walls.get(`${wall.row - 1},${wall.col}`);
     const bottom = this.walls.get(`${wall.row + 1},${wall.col}`);
     const left = this.walls.get(`${wall.row},${wall.col - 1}`);
@@ -191,22 +178,4 @@ export function populate(this: Floor, config: PopulateConfig) {
     if (left) wall.adjacentWalls.left = true;
     if (right) wall.adjacentWalls.right = true;
   }
-
-  // //Pickups
-  // for (let row = 0; row < this.rows; row++) {
-  //   for (let col = 0; col < this.cols; col++) {
-  //     const trackerPos = this.tracker.get(`${row},${col}`);
-  //     if (trackerPos && trackerPos.size > 0) continue;
-
-  //     if (oneIn(200)) {
-  //       const type = getRandomWeaponType();
-  //       const tier = getRandomWeaponTier(type);
-  //       new WeaponPickup(this, row, col, {
-  //         type,
-  //         tier,
-  //       });
-  //     }
-  //   }
-  // }
-  // this.pickupTarget = this.pickups.size;
 }

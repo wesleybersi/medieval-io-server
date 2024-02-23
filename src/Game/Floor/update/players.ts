@@ -13,12 +13,11 @@ export function updatePlayers(this: Floor, delta: number, counter: number) {
       x,
       y,
       angle,
-      weaponry,
-      weaponIndex,
+      activeWeapon,
       didDie,
       wasHit,
+      force,
     } = player;
-    const activeWeapon = weaponry[weaponIndex];
     const playerData = {
       id,
       color,
@@ -26,26 +25,29 @@ export function updatePlayers(this: Floor, delta: number, counter: number) {
       x,
       y,
       angle,
-      weapon: {
-        type: activeWeapon?.type,
-        tier: activeWeapon?.tier,
-        isLoaded: true,
-        isAttack: activeWeapon?.isAttack,
-        force: 0,
-        position: "right",
-      },
+      force,
+      weapon: activeWeapon
+        ? {
+            key: activeWeapon.key,
+            isLoaded: true,
+            isAttack: activeWeapon.isAttack,
+            force: 0,
+            position: "right",
+          }
+        : null,
       isDead: didDie ? true : undefined,
       wasHit: wasHit ? true : undefined,
     };
-    if (activeWeapon instanceof Crossbow) {
-      playerData.weapon.isLoaded = activeWeapon.loadAmount.current > 0;
-    }
-    if (activeWeapon instanceof Spear) {
-      playerData.weapon.force = activeWeapon.holdForce.current; // out of 1
-    }
-    if (activeWeapon instanceof Sword) {
-      playerData.weapon.position = activeWeapon.position;
-      console.log("POSITION");
+    if (activeWeapon && playerData.weapon) {
+      if (activeWeapon instanceof Crossbow) {
+        playerData.weapon.isLoaded = activeWeapon.loadAmount.current > 0;
+      }
+      if (activeWeapon instanceof Spear) {
+        playerData.weapon.force = activeWeapon.holdForce.current; // out of 1
+      }
+      if (activeWeapon instanceof Sword) {
+        playerData.weapon.position = activeWeapon.position;
+      }
     }
 
     this.emissionData.players.push(playerData);

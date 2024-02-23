@@ -1,27 +1,32 @@
-import Floor, { MatrixCellType } from "../../Floor";
+import Floor from "../../Floor";
+import { MatrixCellType } from "../../types";
 import { Player } from "../../../entities/Player/Player";
+import { Collider } from "../../../entities/Collider/Collider";
+import { CELL_SIZE } from "../../../../constants";
 
 export type SpikeConfig = {
   initialState: "on" | "off";
-  globalTimer?: number;
-
-  // button?: Button
 };
 
-export class Spikes {
+export class Spikes extends Collider {
   state: "on" | "off";
-  // globalTimer: number | null;
   floor: Floor;
   row: number;
   col: number;
-
   interval: number = 3;
   constructor(floor: Floor, row: number, col: number, config: SpikeConfig) {
+    super(
+      col * CELL_SIZE + CELL_SIZE / 2,
+      row * CELL_SIZE + CELL_SIZE / 2,
+      CELL_SIZE,
+      CELL_SIZE,
+      false
+    );
     this.floor = floor;
     this.row = row;
     this.col = col;
     this.state = config.initialState;
-    this.floor.addToTrackerCell(this, row, col);
+    this.floor.tracker.addToCell(this, row, col);
     this.floor.globalTimedUpdaters[this.interval].add(this);
   }
   update() {

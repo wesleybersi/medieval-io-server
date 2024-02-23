@@ -9,7 +9,7 @@ import {
 import { Sword } from "../../../entities/Player/entities/Weapon/weapons/Sword";
 
 export function getRandomWeaponType(): WeaponType {
-  const types: WeaponType[] = ["Bow", "Crossbow", "Spear"];
+  const types: WeaponType[] = ["Bow", "Crossbow", "Spear", "Sword"];
   return types[Math.floor(Math.random() * types.length)];
 }
 

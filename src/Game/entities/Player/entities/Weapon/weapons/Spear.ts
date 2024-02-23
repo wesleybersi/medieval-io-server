@@ -1,17 +1,16 @@
 import { getAngleOffset } from "../../../../../../utilities/offset";
 import { Player } from "../../../Player";
-import { Projectile } from "../../../../Projectile/Projectile";
+import { Projectile } from "../../../../../Floor/entities/Projectile/Projectile";
 import { Weapon } from "../Weapon";
-import { WeaponConfig } from "../types";
 
 export class Spear extends Weapon {
   holdForce = { current: 0, multiplier: 0.75, max: 1 };
   speed = 500;
   attackCooldown = { current: 0, total: 0.2 };
-  constructor(player: Player, config: WeaponConfig) {
-    super(player, config);
+  constructor(player: Player, key: string, durability: number) {
+    super(player, key, durability);
     this.setDurability(25);
-    switch (config.tier) {
+    switch (key) {
     }
   }
   attack() {}
@@ -59,8 +58,9 @@ export class Spear extends Weapon {
     } else {
       if (this.holdForce.current === 0) return;
       //Throw Spear projectile
-      this.player.weaponry.splice(this.player.weaponIndex, 1);
-      this.player.weaponIndex = -1;
+      this.player.activeWeapon = null;
+      // this.player.weaponry.splice(this.player.inventory.hotkeyIndex, 1);
+      this.player.inventory.hotkeyIndex = -1;
 
       new Projectile(this.player.floor, "spear", {
         x: this.player.x,

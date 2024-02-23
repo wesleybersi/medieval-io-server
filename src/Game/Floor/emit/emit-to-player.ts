@@ -13,19 +13,21 @@ export function emit(this: Floor) {
       x,
       y,
       angle,
-      weaponry,
+      force,
       health,
       gold,
-      weaponIndex,
+      inventory,
       projectiles,
       finalSecondsAlive,
       dialog,
+      bowCustomization,
     } = player;
     this.emissionData.client = {
       id,
       name,
       color,
       state,
+      force,
       floor: floor.index,
       x,
       y,
@@ -33,15 +35,16 @@ export function emit(this: Floor) {
       health,
       gold,
       secondsAlive: finalSecondsAlive,
-      weaponry: weaponry.map(({ type, tier, durability, bonus }) => ({
-        type,
-        tier,
-        durability: durability.current,
-        bonus,
-      })),
       projectiles,
-      weaponIndex,
+      inventory: {
+        size: { rows: inventory.rows, cols: inventory.cols },
+        itemSlots: player.state === "in-inventory" ? inventory.itemSlots : [],
+        selectedSlot: player.inventory.selectedSlot,
+        hotkeys: inventory.hotkeys,
+        hotkeyIndex: inventory.hotkeyIndex,
+      },
       dialog,
+      bowCustomization,
     };
 
     io.to(id).emit("Game State Update", this.emissionData);

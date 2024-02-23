@@ -9,14 +9,16 @@ import { Socket } from "socket.io";
 import { JoinGameRequest, onJoinGame } from "./events/on-player-joins";
 import { addPlayer } from "./controllers/add-player";
 import { removePlayer } from "./controllers/remove-player";
-import { oneIn, randomNum } from "../utilities";
-import { Stairs } from "./Floor/entities/Stairs/Stairs";
+import { randomNum } from "../utilities";
+
+import { populateItemMap } from "./data/populate-item-map";
+import { InventoryItem } from "./data/types";
 
 interface GameConfig {
   name: string;
   type: "Free For All";
   timer: number;
-  floors: {
+  instances: {
     amount: number;
   };
 }
@@ -26,10 +28,10 @@ export default class Game {
   floors: Floor[] = [];
   players: Map<string, Player>;
   hasLoaded = false;
-  emitTracker = false;
   timeRemaining: number;
   intervalID?: NodeJS.Timeout;
   frameCount: number = 0;
+  itemMap = new Map<string, InventoryItem>();
 
   globalTimers: {
     [key: number]: number;
@@ -44,6 +46,9 @@ export default class Game {
     8: 0,
   };
 
+  //Import Data
+  populateItemMap: () => void = populateItemMap;
+
   //Socket events
   onJoinGame: (socket: Socket) => void = onJoinGame;
 
@@ -55,8 +60,9 @@ export default class Game {
     console.log(`Setting up new ${config.type} game.`);
     this.config = config;
     this.players = new Map();
+    this.populateItemMap();
 
-    const { amount } = config.floors;
+    const { amount } = config.instances;
 
     for (let i = 0; i < amount; i++) {
       this.floors.push(new Floor(this, i));

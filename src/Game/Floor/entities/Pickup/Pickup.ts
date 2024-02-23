@@ -1,5 +1,6 @@
+import { Inventory } from "./../../../entities/Player/entities/Inventory/Inventory";
 import { CELL_SIZE } from "../../../../constants";
-import { clamp } from "../../../../utilities";
+import { clamp, randomNum } from "../../../../utilities";
 import Floor from "../../Floor";
 import { Player } from "../../../entities/Player/Player";
 import { createNewWeapon } from "../../../entities/Player/entities/Weapon/create-weapon";
@@ -10,6 +11,7 @@ import {
 import { Bow } from "../../../entities/Player/entities/Weapon/weapons/Bow";
 import { Crossbow } from "../../../entities/Player/entities/Weapon/weapons/Crossbow";
 import { PickupWeaponConfig } from "./types";
+import { allWeapons } from "../../../data/weapons";
 
 export class Pickup {
   floor: Floor;
@@ -29,12 +31,11 @@ export class Pickup {
     this.x = col * CELL_SIZE + CELL_SIZE / 2;
     this.y = row * CELL_SIZE + CELL_SIZE / 2;
     floor.pickups.set(`${row},${col}`, this);
-    floor.addToTrackerCell(this, row, col);
+    floor.tracker.addToCell(this, row, col);
   }
   remove() {
     this.floor.pickups.delete(`${this.row},${this.col}`);
-    const tracker = this.floor.tracker.get(`${this.row},${this.col}`);
-    tracker?.delete(this);
+    this.floor.tracker.remove(this);
   }
 }
 
@@ -71,14 +72,20 @@ export class WeaponPickup extends Pickup {
     //   }
     // }
 
-    if (player.weaponry.length < 5) {
-      player.weaponry.push(
-        createNewWeapon(player, {
-          type: this.weaponType,
-          tier: this.weaponTier,
-        })
-      );
-      player.weaponIndex = player.weaponry.length - 1;
+    if (player.inventory.hotkeys.some((key) => !key)) {
+      player.inventory.deselectHotKey();
+
+      const weapon = allWeapons[randomNum(allWeapons.length)].key;
+
+      let itemWasAdded = false;
+      player.inventory.hotkeys.forEach((key, index) => {
+        if (!key && !itemWasAdded) {
+          player.inventory.hotkeyIndex = index;
+          player.inventory.newItemToHotKey(weapon, index + 1);
+          itemWasAdded = true;
+        }
+      });
+      this.remove();
 
       // this.floor.emissions.push({type:"weapon-pickup",})
     } else {

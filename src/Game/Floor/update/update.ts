@@ -1,5 +1,5 @@
 import { Pot } from "../entities/Pot/Pot";
-import { Projectile } from "../../entities/Projectile/Projectile";
+import { Projectile } from "../entities/Projectile/Projectile";
 import Floor from "../Floor";
 
 export function update(this: Floor, delta: number, counter: number) {
@@ -18,12 +18,12 @@ export function update(this: Floor, delta: number, counter: number) {
 
   for (const emission of this.emissions) {
     this.emissionData.updaters.push(emission);
-
-    if (!emission.remove && !emission.hit && emission.id) {
+    if (emission.id) {
       this.lastEmissions.set(emission.id, emission);
     }
   }
+
   this.emissions = [];
 
-  this.updateTracker(delta);
+  this.tracker.update();
 }

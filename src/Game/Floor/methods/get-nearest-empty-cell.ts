@@ -6,8 +6,10 @@ export function getNearestEmptyCell(
   col: number,
   checked: Set<string> = new Set()
 ): { row: number; col: number } {
-  const occupiedCell = this.getObjectInPlace(row, col);
-  if (!occupiedCell && this.isWithinBorders(row, col)) {
+  const occupiedCell =
+    this.objectMatrix[row][col].includes("wall") ||
+    this.spriteGridMatrix.has(`${row},${col}`);
+  if (!occupiedCell && this.isValidCell(row, col)) {
     return { row, col };
   } else {
     checked.add(`${row},${col}`);

@@ -8,30 +8,30 @@ import {
   getRandomWeaponType,
 } from "../Pickup/random-weapon";
 import { Player } from "../../../entities/Player/Player";
+import { Collider } from "../../../entities/Collider/Collider";
 
 export type ItemType =
   | "coin"
   | "key"
   | "arrow"
+  | "key-gold"
+  | "key-silver"
   | "five-arrows"
   | "potion-red"
   | "potion-blue"
   | "potion-green"
   | "heart";
 
-export class ItemDrop {
+export class ItemDrop extends Collider {
   id: string;
   floor: Floor;
   type: ItemType;
-  x: number;
-  y: number;
-  width = CELL_SIZE * 0.75;
-  height = CELL_SIZE * 0.75;
   touchedCells: string[] = [];
   lifespan = 150;
   flashTreshold = 30;
   isFlashing = false;
   constructor(floor: Floor, type: ItemType | "random", y: number, x: number) {
+    super(x, y, 12, 12, false);
     this.floor = floor;
     if (type === "random") {
       const types: ItemType[] = [
@@ -41,16 +41,14 @@ export class ItemDrop {
         "potion-blue",
         "potion-green",
         "arrow",
-        "five-arrows",
+        // "five-arrows",
       ];
       this.type = types[randomNum(types.length)];
     } else {
       this.type = type;
     }
-    this.x = x;
-    this.y = y;
     this.id = `${new Date().getTime()}_${Math.floor(Math.random() * 1000)}`;
-    this.floor.trackPosition(this, this.width, this.height);
+    this.floor.tracker.track(this, this.width, this.height);
     this.floor.emissions.push({
       id: this.id,
       type: ("drop-" + this.type) as EmissionType,
@@ -61,7 +59,6 @@ export class ItemDrop {
   }
   update(delta: number) {
     this.lifespan -= 10 * delta;
-    console.log(this.lifespan);
     if (!this.isFlashing && Math.floor(this.lifespan) <= 30) {
       this.isFlashing = true;
       this.floor.emissions.push({
@@ -77,33 +74,36 @@ export class ItemDrop {
     }
   }
   get(player: Player) {
+    if (
+      player.inventory.itemSlots.every((row) =>
+        row.every((slot) => slot !== null)
+      )
+    ) {
+      //TODO Inventory Full UI Message
+      return;
+    }
+
     switch (this.type) {
       case "coin":
         player.gold += 10;
         break;
+      case "key-silver":
+      case "key-gold":
+      case "potion-red":
+      case "potion-blue":
+      case "potion-green":
+      case "arrow":
+        player.inventory.pushItem(this.type);
+        break;
       case "heart":
         player.health = 100;
-        break;
-      case "potion-red":
-        player.health += 50;
-        if (player.health >= 100) player.health = 100;
-        break;
-      case "potion-blue":
-        break;
-      case "potion-green":
-        break;
-      case "arrow":
-        player.projectiles.arrows++;
-        break;
-      case "five-arrows":
-        player.projectiles.arrows += 5;
         break;
     }
 
     this.remove();
   }
   remove() {
-    this.floor.removeFromTracker(this);
+    this.floor.tracker.remove(this);
     this.floor.lastEmissions.delete(this.id);
     this.floor.updaters.delete(this);
     this.floor.emissions.push({

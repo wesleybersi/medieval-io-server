@@ -1,9 +1,8 @@
 import { getAngleOffset } from "../../../../../../utilities/offset";
 import { Player } from "../../../Player";
-import { Projectile } from "../../../../Projectile/Projectile";
+import { Projectile } from "../../../../../Floor/entities/Projectile/Projectile";
 
 import { Weapon } from "../Weapon";
-import { WeaponConfig } from "../types";
 
 export class Crossbow extends Weapon {
   loading = { current: 0, multiplier: 2, total: 1 };
@@ -17,69 +16,69 @@ export class Crossbow extends Weapon {
   speed = 500;
   damage = 25;
   playerDidReload = false;
-  constructor(player: Player, config: WeaponConfig) {
-    super(player, config);
-    switch (config.tier) {
-      case "Simple Crossbow":
+  constructor(player: Player, key: string, durability: number) {
+    super(player, key, durability);
+    switch (key) {
+      case "crossbow-simple":
         this.setDurability(15);
-        this.speed = 350;
+        this.speed = 1750;
         this.damage = 15;
         this.loading.multiplier = 0.75;
         //Manual reload. One shot at a time.
         break;
-      case "Steel Crossbow":
+      case "crossbow-steel":
         this.setDurability(20);
         this.damage = 25;
-        this.speed = 450;
+        this.speed = 2000;
         this.loading.multiplier = 1;
         break;
-      case "Repeating Crossbow":
+      case "crossbow-repeating":
         this.setDurability(20);
         this.damage = 25;
-        this.speed = 400;
+        this.speed = 2000;
         this.loading.multiplier = 0.5;
         this.loadAmount.total = 3;
         break;
-      case "Compound Crossbow":
+      case "crossbow-compound":
         this.setDurability(35);
         this.damage = 35;
-        this.speed = 500;
+        this.speed = 2500;
         this.loading.multiplier = 2;
         this.loadAmount.total = 1;
         break;
-      case "Light Crossbow":
+      case "crossbow-light":
         this.setDurability(25);
         this.damage = 20;
-        this.speed = 350;
+        this.speed = 1500;
         this.loading.multiplier = 10;
         this.loadAmount.total = 1;
         break;
-      case "Heavy Crossbow":
+      case "crossbow-heavy":
         this.setDurability(35);
         this.damage = 50;
-        this.speed = 700;
+        this.speed = 4000;
         this.loading.multiplier = 0.5;
         this.loadAmount.total = 1;
         break;
-      case "Enchanted Crossbow":
+      case "crossbow-enchanted":
         this.setDurability(50);
         this.damage = 30;
-        this.speed = 550;
+        this.speed = 2500;
         this.loading.multiplier = 1;
         this.loadAmount.total = 1;
         break;
-      case "Semi-Automatic Crossbow":
+      case "crossbow-semi-auto":
         this.setDurability(30);
         this.isAutomatic = true;
         this.damage = 23;
-        this.speed = 450;
+        this.speed = 2500;
         this.loading.multiplier = 1.5;
         this.loadAmount.total = 3;
         break;
-      case "Divine Crossbow":
+      case "crossbow-divine":
         this.setDurability(15);
         this.damage = 25;
-        this.speed = 550;
+        this.speed = 2500;
         this.loading.multiplier = 2;
         this.loadAmount.total = 3;
         this.arrowsAtOnce = 3;

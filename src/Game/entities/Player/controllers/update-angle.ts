@@ -38,11 +38,6 @@ export function updateAngle(this: Player, delta: number) {
     return currentAngle;
   };
 
-  // Usage example:
-  this.angle = adjustAngle(this.angle, this.inputAngle.target);
-
-  // this.angle = this.inputAngle.target;
-
-  console.log(this.angle);
+  this.angle = adjustAngle(this.angle, this.targetAngle);
   // Update function
 }

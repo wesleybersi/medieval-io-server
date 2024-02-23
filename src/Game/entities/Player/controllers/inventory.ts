@@ -3,9 +3,9 @@ import { Player } from "../Player";
 
 export function inventory(this: Player) {
   if (this.state !== "in-inventory") {
-    console.log("INVE");
     this.state = "in-inventory";
   } else {
+    this.inventory.selectedSlot = null;
     this.state = "moving";
   }
 }

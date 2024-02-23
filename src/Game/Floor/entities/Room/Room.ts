@@ -1,5 +1,6 @@
 import { oneIn, randomNum } from "../../../../utilities";
-import Floor, { MatrixCellType } from "../../Floor";
+import Floor from "../../Floor";
+import { MatrixCellType } from "../../types";
 import { Chest } from "../Chest/Chest";
 
 export class Room {

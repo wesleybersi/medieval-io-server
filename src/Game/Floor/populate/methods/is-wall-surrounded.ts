@@ -1,4 +1,4 @@
-import { MatrixCellType } from "../../Floor";
+import { MatrixCellType } from "../../types";
 
 export function isWallSurrounded(
   matrix: MatrixCellType[][],

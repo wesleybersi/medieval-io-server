@@ -3,5 +3,5 @@ import Floor from "../Floor";
 
 export function removePlayer(this: Floor, player: Player) {
   this.players.delete(player.id);
-  this.removeFromTracker(player);
+  this.tracker.remove(player);
 }

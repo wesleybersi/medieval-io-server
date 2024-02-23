@@ -24,8 +24,8 @@ const game = new Game({
   name: "Unnamed Server",
   type: "Free For All",
   timer: 100,
-  floors: {
-    amount: 5,
+  instances: {
+    amount: 1,
   },
 });
 

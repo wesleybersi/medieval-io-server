@@ -1,7 +1,9 @@
 import Floor from "../../Floor";
 import { Player } from "../../../entities/Player/Player";
+import { Collider } from "../../../entities/Collider/Collider";
+import { CELL_SIZE } from "../../../../constants";
 
-export class Stairs {
+export class Stairs extends Collider {
   floor: Floor;
   direction: "up" | "down";
   row: number;
@@ -13,17 +15,23 @@ export class Stairs {
     row: number,
     col: number
   ) {
+    super(
+      col * CELL_SIZE + CELL_SIZE / 2,
+      row * CELL_SIZE + CELL_SIZE / 2,
+      CELL_SIZE,
+      CELL_SIZE,
+      false
+    );
     this.floor = floor;
     this.direction = direction;
     this.row = row;
     this.col = col;
-
     this.floor.spriteGridMatrix.set(
       `${this.row},${this.col}`,
       `stairs-${direction}`
     );
 
-    this.floor.addToTrackerCell(this, row, col);
+    this.floor.tracker.addToCell(this, row, col);
   }
   link(target: Stairs) {
     this.target = target;

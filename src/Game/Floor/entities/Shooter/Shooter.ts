@@ -1,37 +1,30 @@
-import { Projectile } from "../../../entities/Projectile/Projectile";
-
+import { Projectile } from "../Projectile/Projectile";
 import { CELL_SIZE } from "../../../../constants";
 import { Direction } from "../../../../types";
-import Floor, { SpriteGridType } from "../../Floor";
+import Floor from "../../Floor";
 import { Player } from "../../../entities/Player/Player";
+import { Collider } from "../../../entities/Collider/Collider";
 
-import { ProjectileType } from "../../../entities/Projectile/types";
-
-export class Shooter {
+export class Shooter extends Collider {
   floor: Floor;
   row: number;
   col: number;
   direction: Direction;
-  boundingBox: { top: number; left: number; right: number; bottom: number };
   triggers: Set<Player> = new Set();
   cooldown = { current: 0, total: 0.5 };
   proximityCells: { row: number; col: number }[] = [];
   constructor(floor: Floor, row: number, col: number, direction: Direction) {
+    super(
+      col * CELL_SIZE + CELL_SIZE / 2,
+      row * CELL_SIZE + CELL_SIZE / 2,
+      CELL_SIZE,
+      CELL_SIZE,
+      false
+    );
     this.floor = floor;
     this.row = row;
     this.col = col;
     this.direction = direction;
-    this.boundingBox = {
-      top: Math.floor(this.row * CELL_SIZE),
-      left: Math.floor(this.col * CELL_SIZE),
-      right: Math.floor(this.col * CELL_SIZE + CELL_SIZE),
-      bottom: Math.floor(this.row * CELL_SIZE + CELL_SIZE),
-    };
-    if (this.floor.spriteGridMatrix.has(`${row},${col}`)) return;
-    this.floor.spriteGridMatrix.set(
-      `${row},${col}`,
-      ("shooter-" + direction) as SpriteGridType
-    );
     this.setProximityPads();
   }
 
@@ -40,13 +33,15 @@ export class Shooter {
 
     switch (this.direction) {
       case "up":
+        this.boundingBox.top += CELL_SIZE;
+        this.boundingBox.bottom += CELL_SIZE;
         for (let i = 1; i < maxProximity + 2; i++) {
           if (
             this.floor.isValidCell(this.row - i, this.col) &&
             this.floor.objectMatrix[this.row - i][this.col].includes("floor")
           ) {
             this.boundingBox.top -= CELL_SIZE;
-            this.floor.addToTrackerCell(this, this.row - i, this.col);
+            this.floor.tracker.addToCell(this, this.row - i, this.col);
             this.proximityCells.push({ row: this.row - i, col: this.col });
           } else {
             break;
@@ -54,13 +49,15 @@ export class Shooter {
         }
         break;
       case "down":
+        this.boundingBox.top -= CELL_SIZE;
+        this.boundingBox.bottom -= CELL_SIZE;
         for (let i = 1; i < maxProximity + 2; i++) {
           if (
             this.floor.isValidCell(this.row + i, this.col) &&
             this.floor.objectMatrix[this.row + i][this.col].includes("floor")
           ) {
             this.boundingBox.bottom += CELL_SIZE;
-            this.floor.addToTrackerCell(this, this.row + i, this.col);
+            this.floor.tracker.addToCell(this, this.row + i, this.col);
             this.proximityCells.push({ row: this.row + i, col: this.col });
           } else {
             break;
@@ -68,13 +65,15 @@ export class Shooter {
         }
         break;
       case "left":
+        this.boundingBox.left -= CELL_SIZE;
+        this.boundingBox.right -= CELL_SIZE;
         for (let i = 1; i < maxProximity + 2; i++) {
           if (
             this.floor.isValidCell(this.row, this.col - i) &&
             this.floor.objectMatrix[this.row][this.col - i].includes("floor")
           ) {
             this.boundingBox.left -= CELL_SIZE;
-            this.floor.addToTrackerCell(this, this.row, this.col - i);
+            this.floor.tracker.addToCell(this, this.row, this.col - i);
             this.proximityCells.push({ row: this.row, col: this.col - i });
           } else {
             break;
@@ -82,13 +81,15 @@ export class Shooter {
         }
         break;
       case "right":
+        this.boundingBox.left += CELL_SIZE;
+        this.boundingBox.right += CELL_SIZE;
         for (let i = 1; i < maxProximity + 2; i++) {
           if (
             this.floor.isValidCell(this.row, this.col + i) &&
             this.floor.objectMatrix[this.row][this.col + i].includes("floor")
           ) {
             this.boundingBox.right += CELL_SIZE;
-            this.floor.addToTrackerCell(this, this.row, this.col + i);
+            this.floor.tracker.addToCell(this, this.row, this.col + i);
             this.proximityCells.push({ row: this.row, col: this.col + i });
           } else {
             break;
@@ -106,7 +107,6 @@ export class Shooter {
     for (const cell of this.proximityCells) {
       this.floor.objectMatrix[cell.row][cell.col] = "floor-3";
     }
-    // this.floor.objectMatrix[this.row][this.col] = "floor-0";
   }
 
   isRectOverlapping(x: number, y: number, width: number, height: number) {
@@ -150,17 +150,17 @@ export class Shooter {
         angle = 0;
         break;
     }
-    setTimeout(() => {
-      new Projectile(this.floor, "arrow", {
-        x,
-        y,
-        angle,
-        speed: 350,
-        damage: 20,
-        shooter: this,
-      });
-      this.floor.updaters.add(this);
-    }, 50);
+    // setTimeout(() => {
+    //   new Projectile(this.floor, "arrow", {
+    //     x,
+    //     y,
+    //     angle,
+    //     speed: 350,
+    //     damage: 20,
+    //     shooter: this,
+    //   });
+    //   this.floor.updaters.add(this);
+    // }, 50);
   }
   update(delta: number) {
     this.cooldown.current += delta;
@@ -170,7 +170,7 @@ export class Shooter {
     }
   }
   remove() {
-    this.floor.removeFromTracker(this);
+    this.floor.tracker.remove(this);
     this.floor.spriteGridMatrix.delete(`${this.row},${this.col}`);
   }
 }

@@ -1,8 +1,4 @@
 export type WeaponType = "Bow" | "Crossbow" | "Spear" | "Sword";
-export interface WeaponConfig {
-  type: WeaponType;
-  tier: WeaponTier;
-}
 
 export type BowTier =
   | "Wooden Bow"
